@@ -1,0 +1,422 @@
+Great mental model. Let me build the complete roadmap and feature list.
+
+---
+
+**WHAT YOU ARE ACTUALLY BUILDING**
+
+One local system with two modes:
+
+Mode 1: Warmup System - emails talking to each other naturally to build domain reputation.
+
+Mode 2: Campaign System - real cold emails to real leads with sequence automation and HubSpot integration.
+
+---
+
+**TECH STACK**
+
+Runtime: Bun
+Framework: Hono
+Database: SQLite via bun:sqlite
+Email Sending: Nodemailer
+IMAP Reply Checking: imapflow
+Scheduling: Bun.cron
+HubSpot Integration: HubSpot API free tier
+UI: Simple HTML + vanilla JS served by Hono
+
+---
+
+**COMPLETE FEATURE LIST**
+
+---
+
+**Module 1: Warmup System**
+
+- Upload ChatGPT generated JSON conversation files
+- System reads JSON and schedules each email at specified random times
+- Emails send automatically throughout the day
+- Auto reply logic between warmup Gmail accounts
+- Warmup log tracking every email sent and received
+- Daily warmup volume control per account
+- Warmup status dashboard showing health per account
+
+---
+
+**Module 2: Account Management**
+
+- Add and manage sending accounts (Google Workspace)
+- Add and manage warmup pool accounts (Gmail)
+- Track emails sent today per account
+- Track daily limits per account
+- Account health status: warming, ready, paused, flagged
+
+---
+
+**Module 3: Lead Management**
+
+- Import leads via CSV from Apollo export
+- Store first name, last name, email, company, website, personalized line
+- Filter leads by status: active, replied, bounced, finished, unsubscribed
+- Manual lead editing
+- Duplicate detection on import
+
+---
+
+**Module 4: Campaign Management**
+
+- Create campaigns with name and settings
+- Assign leads to a campaign
+- Set daily sending limit per campaign
+- Set sending schedule: days and hours
+- Set sending account per campaign
+- Pause and resume campaigns
+- Campaign status: draft, active, paused, completed
+
+---
+
+**Module 5: Sequence Builder**
+
+- Create multi step email sequences per campaign
+- Step 1: initial email, day 0
+- Step 2: follow up, configurable delay in days
+- Step 3: final follow up, configurable delay in days
+- Subject line and body per step
+- Variable support in body: first name, company, personalized line
+- Preview email before launching
+
+---
+
+**Module 6: Email Sender**
+
+- Sends emails on schedule automatically
+- Random delay between emails: 60 to 180 seconds to look human
+- Respects daily limits per account
+- Only sends Monday to Friday within configured hours
+- Marks lead as finished when all steps complete
+- Logs every sent email with timestamp
+
+---
+
+**Module 7: Reply Detection**
+
+- Checks IMAP inbox every 2 hours automatically
+- Detects replies from leads
+- Stops sequence automatically when reply detected
+- Updates lead status to replied
+- Logs reply with timestamp
+- Triggers HubSpot contact creation automatically
+
+---
+
+**Module 8: HubSpot Integration**
+
+- When reply detected, automatically creates contact in HubSpot
+- Pushes contact to pipeline at New Reply stage
+- Sends lead name, email, company, and reply snippet to HubSpot
+- Uses HubSpot free API, no paid plan needed
+- Sohrab only sees HubSpot, never touches your system
+
+---
+
+**Module 9: Dashboard and Analytics**
+
+- Warmup status per account
+- Emails sent today vs daily limit
+- Campaign performance: sent, opened, replied, bounced
+- Reply rate and positive reply rate
+- Active leads count
+- Recent activity log
+
+---
+
+**FOLDER STRUCTURE**
+
+```
+email-system/
+│
+├── src/
+│   ├── index.ts          # Hono server entry point
+│   ├── scheduler.ts      # all Bun.cron jobs
+│   ├── database.ts       # SQLite schema and queries
+│   │
+│   ├── modules/
+│   │   ├── sender.ts         # core email sending
+│   │   ├── imap.ts           # reply checking
+│   │   ├── warmup.ts         # warmup logic
+│   │   ├── sequences.ts      # sequence runner
+│   │   ├── leads.ts          # lead management
+│   │   ├── campaigns.ts      # campaign logic
+│   │   ├── hubspot.ts        # HubSpot API
+│   │   └── processor.ts      # JSON file processor
+│   │
+│   └── routes/
+│       ├── dashboard.ts      # dashboard routes
+│       ├── warmup.ts         # warmup routes
+│       ├── campaigns.ts      # campaign routes
+│       ├── leads.ts          # lead routes
+│       └── accounts.ts       # account routes
+│
+├── public/
+│   ├── index.html        # main UI
+│   ├── dashboard.js
+│   └── style.css
+│
+├── conversations/        # drop ChatGPT JSON files here
+├── uploads/             # CSV lead uploads
+├── data/
+│   └── system.db        # SQLite database
+│
+├── bunfig.toml
+└── package.json
+```
+
+---
+
+**DATABASE SCHEMA**
+
+```sql
+-- sending accounts
+CREATE TABLE accounts (
+    id INTEGER PRIMARY KEY,
+    email TEXT,
+    app_password TEXT,
+    domain TEXT,
+    daily_limit INTEGER DEFAULT 20,
+    emails_sent_today INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'warming',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- warmup pool accounts
+CREATE TABLE warmup_accounts (
+    id INTEGER PRIMARY KEY,
+    email TEXT,
+    app_password TEXT,
+    daily_volume INTEGER DEFAULT 5,
+    active INTEGER DEFAULT 1
+);
+
+-- warmup log
+CREATE TABLE warmup_log (
+    id INTEGER PRIMARY KEY,
+    from_email TEXT,
+    to_email TEXT,
+    subject TEXT,
+    sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    replied INTEGER DEFAULT 0
+);
+
+-- campaigns
+CREATE TABLE campaigns (
+    id INTEGER PRIMARY KEY,
+    name TEXT,
+    account_id INTEGER,
+    status TEXT DEFAULT 'draft',
+    daily_limit INTEGER DEFAULT 20,
+    send_days TEXT DEFAULT 'mon,tue,wed,thu,fri',
+    send_start_hour INTEGER DEFAULT 9,
+    send_end_hour INTEGER DEFAULT 17,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- sequence steps
+CREATE TABLE sequence_steps (
+    id INTEGER PRIMARY KEY,
+    campaign_id INTEGER,
+    step_number INTEGER,
+    subject TEXT,
+    body TEXT,
+    delay_days INTEGER DEFAULT 0
+);
+
+-- leads
+CREATE TABLE leads (
+    id INTEGER PRIMARY KEY,
+    campaign_id INTEGER,
+    first_name TEXT,
+    last_name TEXT,
+    email TEXT,
+    company TEXT,
+    website TEXT,
+    personalized_line TEXT,
+    current_step INTEGER DEFAULT 1,
+    next_send_date DATE,
+    status TEXT DEFAULT 'active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- sent log
+CREATE TABLE sent_log (
+    id INTEGER PRIMARY KEY,
+    lead_id INTEGER,
+    campaign_id INTEGER,
+    step_number INTEGER,
+    subject TEXT,
+    sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    bounced INTEGER DEFAULT 0
+);
+
+-- replies
+CREATE TABLE replies (
+    id INTEGER PRIMARY KEY,
+    lead_id INTEGER,
+    received_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    pushed_to_hubspot INTEGER DEFAULT 0
+);
+```
+
+---
+
+**BUILD ROADMAP**
+
+---
+
+**Week 1: Foundation**
+
+Day 1:
+
+- Install Bun locally
+- Initialize project with Hono
+- Set up SQLite database with full schema
+- Test database connection
+
+Day 2:
+
+- Build core sender module
+- Test sending one real email via SMTP
+- Build IMAP reply checker
+- Test detecting a reply
+
+Day 3:
+
+- Build warmup logic
+- Build JSON conversation processor
+- Test full warmup cycle locally with two Gmail accounts
+
+Day 4:
+
+- Build Bun.cron scheduler
+- Connect warmup to scheduler
+- Test automated warmup running on schedule
+
+Day 5:
+
+- Build lead import from CSV
+- Build campaign creation logic
+- Build sequence step storage
+
+---
+
+**Week 2: Campaign System**
+
+Day 6:
+
+- Build sequence runner
+- Test sending step 1 to a test lead
+- Test delay logic for step 2 and 3
+
+Day 7:
+
+- Connect reply detection to sequence stopper
+- Test full sequence: send, reply detected, sequence stops
+
+Day 8:
+
+- Build HubSpot API integration
+- Test pushing a replied lead to HubSpot pipeline automatically
+
+Day 9:
+
+- Build Hono API routes for all modules
+- Test all routes with Postman or Bruno
+
+Day 10:
+
+- Build basic HTML UI
+- Dashboard with key metrics
+- Campaign management page
+
+---
+
+**Week 3: Polish and Test**
+
+Day 11 to 13:
+
+- Lead management UI
+- Warmup upload UI
+- Account management UI
+- Analytics page
+
+Day 14:
+
+- Full end to end test
+- Warmup running automatically
+- Campaign sending to test leads
+- Replies detected and pushed to HubSpot
+- Sohrab logs into HubSpot and sees the contact
+
+Day 15:
+
+- Fix any bugs found in testing
+- Document the system
+- Prepare for Railway deployment
+
+---
+
+**YOUR GTM FLOW MAPPED TO THE SYSTEM**
+
+```
+Targeting          → you do this manually,
+                     Apollo filters,
+                     outside the system
+
+Data Gathering     → Apollo free export,
+                     Hunter.io free tier,
+                     manual research
+                     outside the system
+
+Enrichment         → Clay free tier,
+                     adds personalized line,
+                     exports to CSV
+                     outside the system
+
+Sending            → YOUR SYSTEM handles this
+                     imports enriched CSV
+                     runs sequences automatically
+                     detects replies
+                     stops sequences
+
+Pipeline           → YOUR SYSTEM pushes to HubSpot
+                     Sohrab logs into HubSpot
+                     manages conversations
+                     closes deals
+```
+
+---
+
+**BUDGET SUMMARY**
+
+During building phase: $0. Everything runs locally.
+
+After deployment:
+
+- Railway: $1 per month after 30 day trial
+- Google Workspace: $3.50 per month via Fiverr
+- sohrabstudio.com: Already paid
+
+Total monthly: $4.50 per month to run a complete GTM system.
+
+---
+
+**START RIGHT NOW**
+
+Open your terminal and run:
+
+```bash
+curl -fsSL https://bun.sh/install | bash
+mkdir email-system
+cd email-system
+bun init
+bun add hono nodemailer imapflow
+```
+
+Come back after that and we start building the database and sender module together.

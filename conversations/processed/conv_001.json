@@ -1,0 +1,30 @@
+{
+  "conversation_id": "conv_001",
+  "participants": {
+    "sender": "geysercontrolsystem@gmail.com",
+    "receiver": "shamirafridi10@gmail.com"
+  },
+  "emails": [
+    {
+      "from": "geysercontrolsystem@gmail.com",
+      "to": "shamirafridi10@gmail.com",
+      "subject": "Following up on the project",
+      "body": "Hi, just wanted to follow up on the website project we discussed last week. Have you had a chance to review the proposal I sent over? Let me know if you have any questions.",
+      "send_after_minutes": 0
+    },
+    {
+      "from": "shamirafridi10@gmail.com",
+      "to": "geysercontrolsystem@gmail.com",
+      "subject": "Re: Following up on the project",
+      "body": "Hey, yes I did look it over. Looks good overall. I had a couple of questions about the timeline and the animation scope. Can we jump on a quick call this week to go over the details?",
+      "send_after_minutes": 3
+    },
+    {
+      "from": "geysercontrolsystem@gmail.com",
+      "to": "shamirafridi10@gmail.com",
+      "subject": "Re: Following up on the project",
+      "body": "Absolutely, Thursday works great for me. How does 2pm sound? I will send over a calendar invite once you confirm.",
+      "send_after_minutes": 8
+    }
+  ]
+}
