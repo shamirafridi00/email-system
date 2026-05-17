@@ -4,196 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Email System</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#1a1a1a;color:#e0e0e0;display:flex;height:100vh;overflow:hidden}
-a{color:inherit;text-decoration:none}
-
-/* Sidebar */
-#sidebar{width:220px;min-width:220px;background:#0f0f0f;display:flex;flex-direction:column;border-right:1px solid #333}
-#sidebar .logo{padding:20px 16px 16px;font-size:15px;font-weight:700;color:#6366f1;border-bottom:1px solid #222}
-#sidebar nav{flex:1;overflow-y:auto}
-.nav-section{padding:8px 0}
-.nav-section-label{padding:10px 16px 4px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#555;display:flex;align-items:center;gap:6px}
-.nav-section-label .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
-.nav-section.warmup-section{background:#0a0f0a}
-.nav-section.warmup-section .dot{background:#22c55e}
-.nav-section.warmup-section .nav-section-label{color:#2d5a2d}
-.nav-section.campaign-section{background:#09090f}
-.nav-section.campaign-section .dot{background:#6366f1}
-.nav-section.campaign-section .nav-section-label{color:#2a2a55}
-.nav-section.settings-section{background:#0f0d09}
-.nav-section.settings-section .dot{background:#f59e0b}
-.nav-section.settings-section .nav-section-label{color:#4a3a10}
-.nav-divider{height:1px;background:#1a1a1a;margin:0}
-#sidebar nav a{display:flex;align-items:center;gap:10px;padding:9px 16px;font-size:13px;color:#888;cursor:pointer;border-left:3px solid transparent;transition:all .15s}
-#sidebar nav a:hover{color:#e0e0e0;background:rgba(255,255,255,.04)}
-.nav-section.warmup-section a.active{color:#22c55e;border-left-color:#22c55e;background:rgba(34,197,94,.06)}
-.nav-section.campaign-section a.active{color:#6366f1;border-left-color:#6366f1;background:rgba(99,102,241,.07)}
-.nav-section.settings-section a.active{color:#f59e0b;border-left-color:#f59e0b;background:rgba(245,158,11,.06)}
-
-/* Top bar */
-#topbar{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:52px;background:#111;border-bottom:1px solid #333;flex-shrink:0}
-#topbar .title{font-size:14px;color:#888}
-#topbar .title span{color:#e0e0e0;font-weight:600}
-
-/* Main */
-#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
-#content{flex:1;overflow-y:auto;padding:24px}
-
-/* Sections */
-.section{display:none}
-.section.active{display:block}
-
-/* Cards */
-.card{background:#242424;border:1px solid #333;border-radius:8px;padding:20px;margin-bottom:16px}
-.card h3{font-size:13px;font-weight:600;color:#aaa;margin-bottom:16px;text-transform:uppercase;letter-spacing:.05em}
-
-/* Stat grid */
-.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
-.stat-card{background:#242424;border:1px solid #333;border-radius:8px;padding:16px}
-.stat-card .label{font-size:11px;color:#888;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em}
-.stat-card .value{font-size:24px;font-weight:700;color:#e0e0e0}
-.stat-card .value.green{color:#22c55e}
-.stat-card .value.red{color:#ef4444}
-.stat-card .value.indigo{color:#6366f1}
-
-/* Tables */
-.table-wrap{overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th{text-align:left;padding:8px 12px;color:#888;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #333;cursor:pointer;user-select:none;white-space:nowrap}
-th:hover{color:#e0e0e0}
-th .sort-icon{margin-left:4px;opacity:.4}
-th.sorted .sort-icon{opacity:1;color:#6366f1}
-td{padding:9px 12px;border-bottom:1px solid #2a2a2a;color:#ccc;vertical-align:middle}
-tr:last-child td{border-bottom:none}
-tr:hover td{background:#2a2a2a}
-.clickable-row{cursor:pointer}
-
-/* Badges */
-.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase}
-.badge-active{background:#312e81;color:#a5b4fc}
-.badge-replied{background:#14532d;color:#86efac}
-.badge-finished{background:#333;color:#888}
-.badge-bounced{background:#450a0a;color:#fca5a5}
-.badge-unsubscribed{background:#451a03;color:#fcd34d}
-.badge-warming{background:#422006;color:#fcd34d}
-.badge-ready{background:#14532d;color:#86efac}
-.badge-paused{background:#333;color:#888}
-.badge-flagged{background:#450a0a;color:#fca5a5}
-.badge-draft{background:#1e1b4b;color:#a5b4fc}
-.badge-completed{background:#333;color:#888}
-.badge-warmup{background:#1e1b4b;color:#a5b4fc}
-.badge-campaign{background:#14532d;color:#86efac}
-
-/* Forms */
-.form-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
-.form-group{display:flex;flex-direction:column;gap:4px;flex:1;min-width:140px}
-.form-group label{font-size:11px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
-input,select,textarea{background:#1a1a1a;border:1px solid #444;border-radius:6px;color:#e0e0e0;padding:8px 10px;font-size:13px;font-family:inherit;outline:none;transition:border-color .15s;width:100%}
-input:focus,select:focus,textarea:focus{border-color:#6366f1}
-textarea{resize:vertical;min-height:80px}
-select option{background:#1a1a1a}
-.checkboxes{display:flex;gap:10px;flex-wrap:wrap;padding:4px 0}
-.checkboxes label{display:flex;align-items:center;gap:4px;font-size:13px;color:#ccc;cursor:pointer;font-weight:normal;text-transform:none;letter-spacing:0}
-.checkboxes input[type=checkbox]{width:auto;accent-color:#6366f1}
-
-/* Buttons */
-.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:6px;font-size:13px;font-weight:500;border:none;cursor:pointer;transition:all .15s;white-space:nowrap}
-.btn-primary{background:#6366f1;color:#fff}
-.btn-primary:hover{background:#4f46e5}
-.btn-success{background:#16a34a;color:#fff}
-.btn-success:hover{background:#15803d}
-.btn-danger{background:#dc2626;color:#fff}
-.btn-danger:hover{background:#b91c1c}
-.btn-ghost{background:transparent;color:#888;border:1px solid #444}
-.btn-ghost:hover{color:#e0e0e0;border-color:#666}
-.btn-sm{padding:4px 10px;font-size:12px}
-.btn-bar{display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
-
-/* Progress bar */
-.progress{background:#333;border-radius:4px;height:6px;overflow:hidden;min-width:60px}
-.progress-fill{height:100%;border-radius:4px;background:#6366f1;transition:width .3s}
-
-/* Search */
-.search-bar{position:relative;max-width:280px}
-.search-bar input{padding-left:32px}
-.search-bar::before{content:'⌕';position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#666;font-size:16px;pointer-events:none}
-
-/* Inline form panel */
-.inline-form{background:#1e1e1e;border:1px solid #444;border-radius:8px;padding:16px;margin-bottom:16px;display:none}
-.inline-form.open{display:block}
-
-/* Slide panel */
-.slide-panel{position:fixed;top:0;right:-420px;width:420px;height:100vh;background:#111;border-left:1px solid #333;padding:24px;transition:right .25s;z-index:100;overflow-y:auto}
-.slide-panel.open{right:0}
-.slide-panel h2{font-size:16px;font-weight:600;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99;display:none}
-.overlay.open{display:block}
-
-/* Toast */
-#toast-container{position:fixed;top:16px;right:16px;z-index:200;display:flex;flex-direction:column;gap:8px}
-.toast{background:#242424;border:1px solid #444;border-radius:8px;padding:12px 16px;font-size:13px;min-width:220px;box-shadow:0 4px 20px rgba(0,0,0,.4);animation:slideIn .2s ease;display:flex;align-items:center;gap:10px}
-.toast.success{border-color:#22c55e;color:#86efac}
-.toast.error{border-color:#ef4444;color:#fca5a5}
-.toast.info{border-color:#6366f1;color:#a5b4fc}
-@keyframes slideIn{from{transform:translateX(40px);opacity:0}to{transform:translateX(0);opacity:1}}
-
-/* Loading */
-.loading{color:#666;padding:20px;text-align:center;font-size:13px}
-.spinner{display:inline-block;width:14px;height:14px;border:2px solid #444;border-top-color:#6366f1;border-radius:50%;animation:spin .6s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-
-/* Expanded step row */
-.steps-row td{padding:0 !important;background:#181818}
-.steps-inner{padding:20px 24px}
-
-/* Step timeline */
-.step-timeline{display:flex;flex-direction:column;gap:0;margin-bottom:20px}
-.step-item{display:flex;gap:16px;position:relative}
-.step-item:not(:last-child)::before{content:'';position:absolute;left:19px;top:40px;bottom:-4px;width:2px;background:#2a2a2a;z-index:0}
-.step-circle{width:38px;height:38px;border-radius:50%;background:#6366f1;color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;z-index:1;margin-top:1px}
-.step-card{flex:1;background:#222;border:1px solid #333;border-radius:8px;padding:14px 16px;margin-bottom:12px}
-.step-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px}
-.step-subject{font-weight:600;font-size:14px;color:#e0e0e0;flex:1}
-.step-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:#1e1b4b;color:#a5b4fc;white-space:nowrap}
-.step-preview{font-size:13px;color:#666;line-height:1.5}
-.step-actions{display:flex;align-items:center;gap:8px;margin-top:10px}
-
-/* Add step form */
-.add-step-form{background:#1e1e1e;border:1px solid #333;border-radius:8px;padding:16px 18px}
-.add-step-form h4{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#555;margin-bottom:14px}
-.helper-text{font-size:12px;color:#555;margin-top:6px;font-style:italic}
-
-/* Email preview modal */
-.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:200;display:none;align-items:center;justify-content:center}
-.modal-backdrop.open{display:flex}
-.modal{background:#fff;border-radius:10px;width:680px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.6)}
-.modal-chrome{background:#f6f8fc;border-bottom:1px solid #e0e0e0;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
-.modal-chrome-title{font-family:Arial,sans-serif;font-size:13px;font-weight:600;color:#444;display:flex;align-items:center;gap:8px}
-.gmail-dot{width:10px;height:10px;border-radius:50%}
-.modal-close{background:none;border:none;cursor:pointer;font-size:20px;color:#888;line-height:1;padding:2px 6px;border-radius:4px}
-.modal-close:hover{background:#e8e8e8;color:#333}
-.modal-header{background:#fff;padding:18px 24px 0;border-bottom:1px solid #e8e8e8;flex-shrink:0}
-.email-field{display:flex;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid #f0f0f0;font-family:Arial,sans-serif;font-size:13px}
-.email-field:last-child{border-bottom:none;padding-bottom:12px}
-.email-field-label{color:#888;font-size:12px;min-width:52px;flex-shrink:0}
-.email-field-value{color:#222;word-break:break-all}
-.email-subject-field{padding:12px 0 14px;font-family:Arial,sans-serif;font-size:18px;font-weight:600;color:#222;border-bottom:1px solid #e8e8e8;margin:0 24px}
-.modal-body{overflow-y:auto;padding:24px;background:#fff;flex:1}
-
-/* Two col */
-.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-@media(max-width:900px){.two-col{grid-template-columns:1fr}.stat-grid{grid-template-columns:repeat(2,1fr)}}
-
-/* Misc */
-.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px}
-.section-title{font-size:18px;font-weight:700}
-.text-muted{color:#666;font-size:12px}
-.mt-8{margin-top:8px}
-.mt-16{margin-top:16px}
-.no-data{color:#555;font-size:13px;padding:20px;text-align:center}
-</style>
+<link rel="stylesheet" href="/public/css/style.css">
 </head>
 <body>
 
@@ -206,6 +17,7 @@ select option{background:#1a1a1a}
       <a data-section="warmup-accounts">🔥 Warmup Accounts</a>
       <a data-section="conversations">💬 Conversations</a>
       <a data-section="warmup-log">📋 Warmup Log</a>
+      <a data-section="warmup-manual">📖 Warmup Manual</a>
     </div>
     <div class="nav-divider"></div>
     <div class="nav-section campaign-section">
@@ -343,6 +155,25 @@ select option{background:#1a1a1a}
         <h3>Warmup Stats Today</h3>
         <div id="warmup-stats-log"></div>
       </div>
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:8px">
+            <label style="font-size:13px;color:#aaa;white-space:nowrap">Conversation:</label>
+            <select id="warmup-log-filter" onchange="renderWarmupLog()" style="min-width:180px;padding:6px 10px;font-size:13px">
+              <option value="">All Conversations</option>
+            </select>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <label style="font-size:13px;color:#aaa;white-space:nowrap">From:</label>
+            <input type="date" id="warmup-log-from" onchange="renderWarmupLog()" style="padding:6px 10px;font-size:13px">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <label style="font-size:13px;color:#aaa;white-space:nowrap">To:</label>
+            <input type="date" id="warmup-log-to" onchange="renderWarmupLog()" style="padding:6px 10px;font-size:13px">
+          </div>
+          <button class="btn btn-danger btn-sm" onclick="resetWarmupLog()" style="margin-left:auto">Reset Log</button>
+        </div>
+      </div>
       <div class="card" style="padding:0;overflow:hidden">
         <div class="table-wrap" id="warmup-log-table"></div>
       </div>
@@ -447,6 +278,181 @@ select option{background:#1a1a1a}
       </div>
     </div>
 
+    <!-- WARMUP MANUAL -->
+    <div id="section-warmup-manual" class="section">
+      <div class="section-header">
+        <div class="section-title">Warmup Manual</div>
+      </div>
+
+      <div class="card" style="max-width:760px">
+
+        <div style="display:flex;flex-direction:column;gap:32px">
+
+          <!-- Section 1 -->
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <div style="width:32px;height:32px;border-radius:8px;background:#1e1b4b;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">🌡</div>
+              <h2 style="margin:0;font-size:15px;font-weight:700;color:#fff">What is Email Warmup?</h2>
+            </div>
+            <p style="margin:0;font-size:13px;line-height:1.75;color:#aaa">Email warmup is the process of building a positive sending reputation for a domain and email account before launching cold outreach campaigns. When a new email account sends a large volume of messages immediately, spam filters flag it as suspicious and deliverability collapses. Warmup fixes this by gradually simulating natural email activity — real sends, real replies, real engagement — so Gmail and other providers learn to trust your domain before you ever contact a prospect.</p>
+          </div>
+
+          <div style="height:1px;background:#222"></div>
+
+          <!-- Section 2 -->
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <div style="width:32px;height:32px;border-radius:8px;background:#052e16;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">⚙</div>
+              <h2 style="margin:0;font-size:15px;font-weight:700;color:#fff">How It Works</h2>
+            </div>
+            <p style="margin:0 0 12px 0;font-size:13px;line-height:1.75;color:#aaa">The system runs a warmup cycle automatically on a schedule. Here is what happens during each cycle:</p>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;gap:12px;align-items:flex-start">
+                <div style="width:22px;height:22px;border-radius:50%;background:#6366f1;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">1</div>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa">A <strong style="color:#ddd">sender account</strong> is picked at random from your warmup accounts pool and sends an email to another account in the pool.</p>
+              </div>
+              <div style="display:flex;gap:12px;align-items:flex-start">
+                <div style="width:22px;height:22px;border-radius:50%;background:#6366f1;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">2</div>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa">After a <strong style="color:#ddd">random delay of 5 to 30 minutes</strong>, the receiving account automatically sends a reply back — simulating a real human conversation.</p>
+              </div>
+              <div style="display:flex;gap:12px;align-items:flex-start">
+                <div style="width:22px;height:22px;border-radius:50%;background:#6366f1;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">3</div>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa">Both the send and the reply are <strong style="color:#ddd">logged in the Warmup Log</strong>. Gmail registers two-way engagement and raises the sender reputation score over time.</p>
+              </div>
+              <div style="display:flex;gap:12px;align-items:flex-start">
+                <div style="width:22px;height:22px;border-radius:50%;background:#6366f1;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">4</div>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa">You can also upload <strong style="color:#ddd">custom conversation JSON files</strong> with specific email chains that will be sent on a timed schedule.</p>
+              </div>
+            </div>
+          </div>
+
+          <div style="height:1px;background:#222"></div>
+
+          <!-- Section 3 -->
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <div style="width:32px;height:32px;border-radius:8px;background:#1c1917;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">🔥</div>
+              <h2 style="margin:0;font-size:15px;font-weight:700;color:#fff">Warmup Accounts</h2>
+            </div>
+            <p style="margin:0 0 12px 0;font-size:13px;line-height:1.75;color:#aaa">Warmup accounts are Gmail addresses that exist purely to send and receive warmup traffic. They are separate from your campaign sending accounts. Think of them as a pool of accounts that talk to each other to build domain reputation.</p>
+            <div style="background:#111;border:1px solid #2a2a2a;border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Minimum 2 accounts</strong> are required to run warmup. The more accounts in the pool, the more natural the activity looks to Gmail.</p>
+              </div>
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">App passwords</strong> are required, not your regular Gmail password. Go to Google Account → Security → 2-Step Verification → App passwords to generate one for each account.</p>
+              </div>
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Recommended daily volume</strong> is 5 to 10 warmup emails per account per day. Starting too high too soon can trigger spam filters instead of avoiding them.</p>
+              </div>
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa">Use the <strong style="color:#ddd">Active</strong> column on the Warmup Accounts page to pause specific accounts without deleting them from the pool.</p>
+              </div>
+            </div>
+          </div>
+
+          <div style="height:1px;background:#222"></div>
+
+          <!-- Section 4 -->
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <div style="width:32px;height:32px;border-radius:8px;background:#0c1a2e;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">💬</div>
+              <h2 style="margin:0;font-size:15px;font-weight:700;color:#fff">Conversations</h2>
+            </div>
+            <p style="margin:0 0 12px 0;font-size:13px;line-height:1.75;color:#aaa">Conversation files are JSON files that define a scripted email exchange between two or more of your warmup accounts. They give you full control over the content and timing of warmup emails, making the activity look more human.</p>
+            <div style="background:#111;border:1px solid #2a2a2a;border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px;margin-bottom:12px">
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Generate with ChatGPT:</strong> Ask ChatGPT to write a realistic back-and-forth email conversation between two colleagues discussing a project. Paste the output into the JSON format with <code style="background:#1a1a1a;padding:1px 5px;border-radius:3px;font-size:12px">from</code>, <code style="background:#1a1a1a;padding:1px 5px;border-radius:3px;font-size:12px">to</code>, <code style="background:#1a1a1a;padding:1px 5px;border-radius:3px;font-size:12px">subject</code>, <code style="background:#1a1a1a;padding:1px 5px;border-radius:3px;font-size:12px">body</code>, and <code style="background:#1a1a1a;padding:1px 5px;border-radius:3px;font-size:12px">send_after_minutes</code> fields.</p>
+              </div>
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">conversation_id field:</strong> Add a <code style="background:#1a1a1a;padding:1px 5px;border-radius:3px;font-size:12px">"conversation_id": "your-label"</code> key at the top of the JSON to tag all emails from this file so you can filter them in the Warmup Log.</p>
+              </div>
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">After upload:</strong> The system schedules each email based on its <code style="background:#1a1a1a;padding:1px 5px;border-radius:3px;font-size:12px">send_after_minutes</code> value and sends it using the matching warmup account credentials. The file is recorded in the Conversations history table.</p>
+              </div>
+            </div>
+            <div style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:14px 16px;font-family:monospace;font-size:12px;color:#e6edf3;line-height:1.7">
+              <span style="color:#8b949e">// Example conversation JSON structure</span><br>
+              {<br>
+              &nbsp;&nbsp;<span style="color:#79c0ff">"conversation_id"</span>: <span style="color:#a5d6ff">"week1-batch1"</span>,<br>
+              &nbsp;&nbsp;<span style="color:#79c0ff">"emails"</span>: [<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;{ <span style="color:#79c0ff">"from"</span>: <span style="color:#a5d6ff">"acc1@gmail.com"</span>, <span style="color:#79c0ff">"to"</span>: <span style="color:#a5d6ff">"acc2@gmail.com"</span>,<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#79c0ff">"subject"</span>: <span style="color:#a5d6ff">"Following up"</span>, <span style="color:#79c0ff">"body"</span>: <span style="color:#a5d6ff">"Hey, just checking in..."</span>,<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#79c0ff">"send_after_minutes"</span>: <span style="color:#79c0ff">0</span> },<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;{ <span style="color:#79c0ff">"from"</span>: <span style="color:#a5d6ff">"acc2@gmail.com"</span>, <span style="color:#79c0ff">"to"</span>: <span style="color:#a5d6ff">"acc1@gmail.com"</span>,<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#79c0ff">"subject"</span>: <span style="color:#a5d6ff">"Re: Following up"</span>, <span style="color:#79c0ff">"body"</span>: <span style="color:#a5d6ff">"Thanks, got it!"</span>,<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#79c0ff">"send_after_minutes"</span>: <span style="color:#79c0ff">15</span> }<br>
+              &nbsp;&nbsp;]<br>
+              }
+            </div>
+          </div>
+
+          <div style="height:1px;background:#222"></div>
+
+          <!-- Section 5 -->
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <div style="width:32px;height:32px;border-radius:8px;background:#14532d;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">📅</div>
+              <h2 style="margin:0;font-size:15px;font-weight:700;color:#fff">Warmup Timeline</h2>
+            </div>
+            <p style="margin:0 0 14px 0;font-size:13px;line-height:1.75;color:#aaa">A 14-day warmup period is the minimum before starting real cold outreach. Follow this ramp to avoid triggering spam filters:</p>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <div style="display:flex;align-items:center;border-radius:8px;overflow:hidden;border:1px solid #2a2a2a">
+                <div style="background:#1e293b;padding:11px 16px;font-size:12px;font-weight:700;color:#94a3b8;white-space:nowrap;width:110px;flex-shrink:0">Days 1 – 7</div>
+                <div style="flex:1;padding:11px 16px;font-size:13px;color:#aaa;border-left:1px solid #2a2a2a">Send <strong style="color:#ddd">5 warmup emails</strong> per account per day. Keep conversation_id labels consistent. Let replies come through naturally.</div>
+              </div>
+              <div style="display:flex;align-items:center;border-radius:8px;overflow:hidden;border:1px solid #2a2a2a">
+                <div style="background:#1e293b;padding:11px 16px;font-size:12px;font-weight:700;color:#94a3b8;white-space:nowrap;width:110px;flex-shrink:0">Days 8 – 14</div>
+                <div style="flex:1;padding:11px 16px;font-size:13px;color:#aaa;border-left:1px solid #2a2a2a">Increase to <strong style="color:#ddd">10 warmup emails</strong> per account per day. You should start seeing the domain in Google Postmaster Tools with a good reputation signal.</div>
+              </div>
+              <div style="display:flex;align-items:center;border-radius:8px;overflow:hidden;border:1px solid #2a2a2a">
+                <div style="background:#14532d;padding:11px 16px;font-size:12px;font-weight:700;color:#86efac;white-space:nowrap;width:110px;flex-shrink:0">Day 15+</div>
+                <div style="flex:1;padding:11px 16px;font-size:13px;color:#aaa;border-left:1px solid #2a2a2a"><strong style="color:#ddd">Start your real campaigns.</strong> Continue warmup in parallel at a maintenance volume of 5 emails per account per day to keep the reputation signal active.</div>
+              </div>
+            </div>
+            <p style="margin:12px 0 0 0;font-size:12px;line-height:1.6;color:#555">Note: Domains with poor SPF / DKIM / DMARC records may need a longer warmup period. Set up DNS authentication records before starting warmup for best results.</p>
+          </div>
+
+          <div style="height:1px;background:#222"></div>
+
+          <!-- Section 6 -->
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <div style="width:32px;height:32px;border-radius:8px;background:#1a0a00;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">📋</div>
+              <h2 style="margin:0;font-size:15px;font-weight:700;color:#fff">Warmup Log</h2>
+            </div>
+            <p style="margin:0 0 12px 0;font-size:13px;line-height:1.75;color:#aaa">The Warmup Log records every email sent and received as part of the warmup system — both automatic cycles and conversation file emails.</p>
+            <div style="background:#111;border:1px solid #2a2a2a;border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Replied column:</strong> A Yes badge means the email was an auto-reply from the receiving account. Seeing replies is a good sign — it means two-way engagement is being recorded by Gmail.</p>
+              </div>
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Filter by Conversation:</strong> Use the dropdown to isolate emails from a specific conversation file. Auto-generated warmup emails appear under the <code style="background:#1a1a1a;padding:1px 5px;border-radius:3px;font-size:12px">auto</code> label.</p>
+              </div>
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Date range filter:</strong> Use the From and To date pickers to narrow the log to a specific period. Filtering is instant and happens in the browser with no page reload.</p>
+              </div>
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Reset Log:</strong> Clears all warmup log entries permanently. Do this at the start of a fresh warmup cycle or after migrating accounts. Warmup accounts themselves are not affected — only the log records are deleted.</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -502,1018 +508,13 @@ John,Smith,john@acme.com,Acme,acme.com,Loved your recent blog post"></textarea>
 
 <div id="toast-container"></div>
 
-<script>
-// ─── State ───────────────────────────────────────────────────────────────────
-const state = {
-  section: 'campaign-dashboard',
-  leads: [],
-  campaigns: [],
-  accounts: [],
-  expandedCampaign: null,
-};
-
-// ─── API ──────────────────────────────────────────────────────────────────────
-async function api(path, opts = {}) {
-  const headers = { 'Content-Type': 'application/json' };
-  const token = localStorage.getItem('hs_token');
-  if (token) headers['X-HubSpot-Token'] = token;
-  const r = await fetch(path, { headers, credentials: 'include', ...opts });
-  if (r.status === 401) { window.location.href = '/login'; return; }
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.error || r.statusText);
-  return data;
-}
-
-async function logout() {
-  await fetch('/auth/logout', { method: 'POST', credentials: 'include' });
-  window.location.href = '/login';
-}
-
-// ─── Toast ───────────────────────────────────────────────────────────────────
-function toast(msg, type = 'info') {
-  const el = document.createElement('div');
-  el.className = `toast ${type}`;
-  el.textContent = msg;
-  document.getElementById('toast-container').appendChild(el);
-  setTimeout(() => el.remove(), 3000);
-}
-
-// ─── Navigation ──────────────────────────────────────────────────────────────
-document.querySelectorAll('#sidebar nav a').forEach(a => {
-  a.addEventListener('click', () => navigate(a.dataset.section));
-});
-
-function navigate(section) {
-  state.section = section;
-  document.querySelectorAll('#sidebar nav a').forEach(a =>
-    a.classList.toggle('active', a.dataset.section === section));
-  document.querySelectorAll('.section').forEach(s =>
-    s.classList.toggle('active', s.id === `section-${section}`));
-  const loaders = {
-    'warmup-dashboard': loadWarmupDashboard,
-    'warmup-accounts': loadWarmupAccounts,
-    'conversations': loadConversations,
-    'warmup-log': loadWarmupLog,
-    'campaign-dashboard': loadCampaignDashboard,
-    campaigns: loadCampaigns,
-    leads: loadLeads,
-    'sending-accounts': loadAccounts,
-    settings: loadSettings,
-  };
-  loaders[section]?.();
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-function formatTime(iso) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-function statusBadge(status) {
-  return `<span class="badge badge-${status?.toLowerCase() || 'finished'}">${status || '—'}</span>`;
-}
-
-function el(id) { return document.getElementById(id); }
-
-// ─── Sorting ─────────────────────────────────────────────────────────────────
-let sortState = {};
-function sortTable(arr, key, tableId) {
-  const s = sortState[tableId] || { key: null, dir: 1 };
-  const dir = s.key === key ? -s.dir : 1;
-  sortState[tableId] = { key, dir };
-  return [...arr].sort((a, b) => {
-    const av = a[key] ?? '', bv = b[key] ?? '';
-    return av < bv ? -dir : av > bv ? dir : 0;
-  });
-}
-function sortIcon(tableId, key) {
-  const s = sortState[tableId];
-  if (!s || s.key !== key) return '<span class="sort-icon">↕</span>';
-  return `<span class="sort-icon">${s.dir === 1 ? '↑' : '↓'}</span>`;
-}
-function thSort(label, key, tableId, onSort) {
-  const sorted = sortState[tableId]?.key === key;
-  return `<th class="${sorted ? 'sorted' : ''}" onclick="(${onSort.toString()})('${key}')">${label}${sortIcon(tableId, key)}</th>`;
-}
-
-// ─── Warmup Dashboard ────────────────────────────────────────────────────────
-async function loadWarmupDashboard() {
-  el('wd-stat-grid').innerHTML = '<div class="loading"><span class="spinner"></span></div>';
-  try {
-    const [ws, wlog] = await Promise.all([
-      api('/dashboard/warmup-stats'),
-      api('/warmup/log'),
-    ]);
-
-    // Status badge
-    el('wd-status-badge').innerHTML = ws.warmup_running
-      ? '<span class="badge badge-replied" style="font-size:12px;padding:4px 10px">● Running</span>'
-      : '<span class="badge badge-bounced" style="font-size:12px;padding:4px 10px">■ Paused</span>';
-
-    // Stats grid
-    el('wd-stat-grid').innerHTML = `
-      <div class="stat-card"><div class="label">Sent Today</div><div class="value green">${ws.sent_today}</div></div>
-      <div class="stat-card"><div class="label">Sent All Time</div><div class="value">${ws.sent_total}</div></div>
-      <div class="stat-card"><div class="label">Warmup Accounts</div><div class="value indigo">${ws.account_count}</div></div>
-      <div class="stat-card"><div class="label">Days Running</div><div class="value">${ws.days_running}${ws.start_date ? `<div style="font-size:11px;font-weight:400;color:#666;margin-top:2px">since ${ws.start_date}</div>` : ''}</div></div>
-    `;
-
-    // 7-day table
-    const days7 = ws.last_7_days;
-    if (days7.length) {
-      const max = Math.max(...days7.map(d => d.count), 1);
-      el('wd-7day-table').innerHTML = `
-        <table><thead><tr><th>Date</th><th>Emails Sent</th><th></th></tr></thead>
-        <tbody>${days7.map(d => `<tr>
-          <td style="color:#888;font-size:12px">${d.day}</td>
-          <td><strong>${d.count}</strong></td>
-          <td style="width:140px">
-            <div class="progress" style="width:${Math.max(20, Math.round((d.count/max)*140))}px">
-              <div class="progress-fill" style="width:100%;background:#22c55e"></div>
-            </div>
-          </td>
-        </tr>`).join('')}</tbody></table>`;
-    } else {
-      el('wd-7day-table').innerHTML = '<div class="no-data">No warmup emails in last 7 days</div>';
-    }
-
-    // Recent log
-    const recent = wlog.slice(0, 10);
-    el('wd-recent-log').innerHTML = recent.length ? `<table>
-      <thead><tr><th>From</th><th>To</th><th>Replied</th><th>Time</th></tr></thead>
-      <tbody>${recent.map(r => `<tr>
-        <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.from_email}</td>
-        <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.to_email}</td>
-        <td>${r.replied ? '<span class="badge badge-replied">Yes</span>' : '—'}</td>
-        <td style="white-space:nowrap">${formatTime(r.sent_at)}</td>
-      </tr>`).join('')}</tbody>
-    </table>` : '<div class="no-data">No warmup emails yet</div>';
-
-    el('wd-refresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
-  } catch(e) {
-    el('wd-stat-grid').innerHTML = `<div class="loading" style="color:#ef4444">${e.message}</div>`;
-  }
-}
-
-// ─── Campaign Dashboard ───────────────────────────────────────────────────────
-async function loadCampaignDashboard() {
-  el('cd-stat-grid').innerHTML = '<div class="loading"><span class="spinner"></span></div>';
-  el('cd-sent-log').innerHTML = '<div class="loading"><span class="spinner"></span></div>';
-  try {
-    const [stats, leadStats, activity] = await Promise.all([
-      api('/dashboard/stats'),
-      api('/leads/stats'),
-      api('/dashboard/activity'),
-    ]);
-
-    // Stats
-    const totalLeads = Object.values(leadStats).reduce((a, b) => a + b, 0);
-    const repliedLeads = leadStats.replied ?? 0;
-    const replyRate = totalLeads > 0 ? ((repliedLeads / totalLeads) * 100).toFixed(1) : '0.0';
-    el('cd-stat-grid').innerHTML = `
-      <div class="stat-card"><div class="label">Active Campaigns</div><div class="value indigo">${stats.active_campaigns ?? 0}</div></div>
-      <div class="stat-card"><div class="label">Total Leads</div><div class="value">${totalLeads}</div></div>
-      <div class="stat-card"><div class="label">Emails Sent Today</div><div class="value">${stats.emails_sent_today ?? 0}</div></div>
-      <div class="stat-card"><div class="label">Reply Rate</div><div class="value green">${replyRate}%</div></div>
-      <div class="stat-card"><div class="label">Unpushed Replies</div><div class="value ${stats.unpushed_replies > 0 ? 'indigo' : ''}">${stats.unpushed_replies ?? 0}</div></div>
-      <div class="stat-card"><div class="label">HubSpot</div><div class="value ${stats.hubspot_connected ? 'green' : 'red'}">${stats.hubspot_connected ? 'Connected' : 'Disconnected'}</div></div>
-    `;
-
-    // Lead status badges
-    const statuses = ['active','replied','finished','bounced','unsubscribed'];
-    const badgeColors = { active:'badge-active', replied:'badge-replied', finished:'badge-finished', bounced:'badge-bounced', unsubscribed:'badge-unsubscribed' };
-    el('cd-lead-badges').innerHTML = statuses.map(s =>
-      `<div style="display:flex;align-items:center;gap:6px;background:#1e1e1e;border:1px solid #333;border-radius:6px;padding:8px 14px">
-        <span class="badge ${badgeColors[s]}">${s}</span>
-        <span style="font-size:20px;font-weight:700;color:#e0e0e0">${leadStats[s] ?? 0}</span>
-      </div>`
-    ).join('');
-
-    // Recent sent log (only 'sent' type entries)
-    const sentRows = activity.filter(r => r.type === 'sent').slice(0, 10);
-    el('cd-sent-log').innerHTML = sentRows.length ? `<table>
-      <thead><tr><th>Time</th><th>Name</th><th>Company</th><th>Subject</th><th>Status</th></tr></thead>
-      <tbody>${sentRows.map(r => `<tr>
-        <td style="white-space:nowrap">${formatTime(r.timestamp)}</td>
-        <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.first_name || '—'}</td>
-        <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.company || '—'}</td>
-        <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.subject || '—'}</td>
-        <td>${r.bounced ? statusBadge('bounced') : statusBadge('sent')}</td>
-      </tr>`).join('')}</tbody>
-    </table>` : '<div class="no-data">No emails sent yet</div>';
-
-    el('cd-refresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
-  } catch(e) {
-    el('cd-stat-grid').innerHTML = `<div class="loading" style="color:#ef4444">${e.message}</div>`;
-  }
-}
-
-let runCooldownInterval = null;
-
-function startRunCooldown(fromTimestamp) {
-  const COOLDOWN = 5 * 60 * 1000;
-  const btn = el('run-now-btn');
-  const label = el('run-last-time');
-
-  // Show last run time
-  label.textContent = 'Last run: ' + formatTime(new Date(fromTimestamp).toISOString());
-
-  if (runCooldownInterval) clearInterval(runCooldownInterval);
-
-  function tick() {
-    const elapsed = Date.now() - fromTimestamp;
-    const remaining = COOLDOWN - elapsed;
-    if (remaining <= 0) {
-      clearInterval(runCooldownInterval);
-      runCooldownInterval = null;
-      btn.disabled = false;
-      btn.innerHTML = '<span id="run-spinner"></span> Run Campaign Now';
-      return;
-    }
-    const m = Math.floor(remaining / 60000);
-    const s = Math.floor((remaining % 60000) / 1000);
-    btn.disabled = true;
-    btn.innerHTML = `<span id="run-spinner"></span> Wait ${m}:${s.toString().padStart(2,'0')}`;
-  }
-
-  tick();
-  runCooldownInterval = setInterval(tick, 1000);
-}
-
-async function runAllNow() {
-  const btn = el('run-now-btn');
-  if (btn.disabled) return;
-  el('run-spinner').innerHTML = '<span class="spinner"></span>';
-  btn.disabled = true;
-  try {
-    const r = await api('/dashboard/run-now', { method: 'POST' });
-    toast(`Done — sent: ${r.sequences?.sent ?? 0}, replies pushed: ${r.repliesPushed ?? 0}`, 'success');
-    startRunCooldown(r.last_run_at ?? Date.now());
-    if (state.section === 'campaign-dashboard') loadCampaignDashboard();
-  } catch (e) {
-    // 429 comes through as a thrown error from api() — extract the wait message
-    toast(e.message, 'error');
-    btn.disabled = false;
-    el('run-spinner').innerHTML = '';
-  }
-}
-
-// On page load check if a cooldown is still active from a previous run
-(async function checkRunCooldown() {
-  try {
-    // Ping the endpoint with a GET-safe approach: just check dashboard stats
-    // for last_run_at we probe by attempting a POST and catching 429
-    const probe = await fetch('/dashboard/run-now', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: '{}',
-    });
-    if (probe.status === 429) {
-      const data = await probe.json().catch(() => ({}));
-      // Extract minutes remaining from error message "Please wait X minutes..."
-      const match = (data.error || '').match(/(\d+)/);
-      const minutesLeft = match ? parseInt(match[1]) : 5;
-      // Reconstruct a fake fromTimestamp so countdown starts at the right offset
-      const fakeFrom = Date.now() - (5 - minutesLeft) * 60000;
-      startRunCooldown(fakeFrom);
-    } else if (probe.ok) {
-      const data = await probe.json().catch(() => ({}));
-      if (data.last_run_at) startRunCooldown(data.last_run_at);
-    }
-  } catch { /* non-critical */ }
-})();
-
-setInterval(() => {
-  if (state.section === 'campaign-dashboard') loadCampaignDashboard();
-  else if (state.section === 'warmup-dashboard') loadWarmupDashboard();
-}, 30000);
-
-// ─── Warmup ──────────────────────────────────────────────────────────────────
-async function loadWarmupStatus() {
-  try {
-    const s = await api('/warmup/status');
-    const running = s.warmup_running;
-    el('warmup-status-badge').innerHTML = running
-      ? '<span class="badge badge-replied" style="font-size:12px;padding:4px 10px">● Running</span>'
-      : '<span class="badge badge-bounced" style="font-size:12px;padding:4px 10px">■ Paused</span>';
-  } catch(e) { el('warmup-status-badge').innerHTML = ''; }
-}
-
-async function loadWarmupAccounts() {
-  await Promise.all([loadWarmupAccountsTable(), loadWarmupStatsCard(), loadWarmupStatus()]);
-}
-
-async function loadWarmupAccountsTable() {
-  try {
-    const rows = await api('/warmup/accounts');
-    el('warmup-accounts-table').innerHTML = rows.length ? `<table>
-      <thead><tr><th>Email</th><th>Vol/Day</th><th>Active</th><th>Last Active</th><th></th></tr></thead>
-      <tbody>${rows.map(r => `<tr>
-        <td>${r.email}</td>
-        <td>${r.daily_volume}</td>
-        <td>${r.active ? '✓' : '—'}</td>
-        <td style="color:${r.last_active ? '#888' : '#555'};white-space:nowrap">${r.last_active ? formatTime(r.last_active) : 'Never'}</td>
-        <td><button class="btn btn-danger btn-sm" onclick="deleteWarmupAccount(${r.id})">Delete</button></td>
-      </tr>`).join('')}</tbody>
-    </table>` : '<div class="no-data">No warmup accounts yet</div>';
-  } catch(e) { el('warmup-accounts-table').innerHTML = `<div class="no-data" style="color:#ef4444">${e.message}</div>`; }
-}
-
-async function loadWarmupStatsCard() {
-  try {
-    const s = await api('/warmup/stats');
-    const html = `<div style="font-size:32px;font-weight:700;color:#22c55e">${s.sent_today}</div><div class="text-muted">warmup emails sent today</div>`;
-    if (el('warmup-stats')) el('warmup-stats').innerHTML = html;
-    if (el('warmup-stats-log')) el('warmup-stats-log').innerHTML = html;
-  } catch(e) {}
-}
-
-async function loadWarmupLog() {
-  await loadWarmupStatsCard();
-  try {
-    const rows = await api('/warmup/log');
-    el('warmup-log-refresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
-    el('warmup-log-table').innerHTML = rows.length ? `<table>
-      <thead><tr><th>From</th><th>To</th><th>Subject</th><th>Replied</th><th>Time</th></tr></thead>
-      <tbody>${rows.map(r => `<tr>
-        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.from_email}</td>
-        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.to_email}</td>
-        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.subject}</td>
-        <td>${r.replied ? '<span class="badge badge-replied">Yes</span>' : '—'}</td>
-        <td>${formatTime(r.sent_at)}</td>
-      </tr>`).join('')}</tbody>
-    </table>` : '<div class="no-data">No warmup emails sent yet</div>';
-  } catch(e) {}
-}
-
-async function addWarmupAccount() {
-  const email = el('wa-email').value.trim();
-  const pass = el('wa-pass').value.trim();
-  if (!email || !pass) { toast('Email and password required', 'error'); return; }
-  try {
-    await api('/warmup/accounts', { method: 'POST', body: JSON.stringify({ email, app_password: pass }) });
-    el('wa-email').value = ''; el('wa-pass').value = '';
-    toast('Warmup account added', 'success');
-    loadWarmupAccounts();
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-async function deleteWarmupAccount(id) {
-  if (!confirm('Delete this warmup account?')) return;
-  try {
-    await api(`/warmup/accounts/${id}`, { method: 'DELETE' });
-    toast('Deleted', 'success');
-    loadWarmupAccounts();
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-async function loadConversations() {
-  try {
-    const rows = await api('/warmup/conversations');
-    el('conv-history-table').innerHTML = rows.length ? `<table>
-      <thead><tr><th>Filename</th><th>Emails Scheduled</th><th>Uploaded At</th><th>Status</th></tr></thead>
-      <tbody>${rows.map(r => `<tr>
-        <td style="font-family:monospace;font-size:12px">${r.filename}</td>
-        <td>${r.email_count}</td>
-        <td>${formatTime(r.uploaded_at)}</td>
-        <td><span class="badge badge-active">${r.status}</span></td>
-      </tr>`).join('')}</tbody>
-    </table>` : '<div class="no-data">No conversation files uploaded yet</div>';
-  } catch(e) {
-    el('conv-history-table').innerHTML = `<div class="no-data" style="color:#ef4444">${e.message}</div>`;
-  }
-}
-
-async function uploadConversation() {
-  const filename = el('conv-filename').value.trim();
-  const content = el('conv-content').value.trim();
-  if (!filename || !content) { toast('Filename and content required', 'error'); return; }
-  try {
-    const r = await api('/warmup/upload', { method: 'POST', body: JSON.stringify({ filename, content }) });
-    toast(`Scheduled ${r.scheduled_emails} emails from ${r.filename}`, 'success');
-    el('conv-result').innerHTML = `<div style="color:#22c55e;font-size:13px">✓ Scheduled ${r.scheduled_emails} emails from <strong>${r.filename}</strong></div>`;
-    el('conv-filename').value = ''; el('conv-content').value = '';
-    loadConversations();
-  } catch(e) {
-    el('conv-result').innerHTML = `<div style="color:#ef4444;font-size:13px">${e.message}</div>`;
-    toast(e.message, 'error');
-  }
-}
-
-async function startWarmup() {
-  try {
-    await api('/warmup/start', { method: 'POST' });
-    toast('Warmup started', 'success');
-    await loadWarmupStatus();
-    await api('/warmup/run', { method: 'POST' });
-    setTimeout(loadWarmupAccountsTable, 2000);
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-async function stopWarmup() {
-  try {
-    await api('/warmup/stop', { method: 'POST' });
-    toast('Warmup paused', 'success');
-    loadWarmupStatus();
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-// ─── Campaigns ───────────────────────────────────────────────────────────────
-async function loadCampaigns() {
-  try {
-    state.campaigns = await api('/campaigns');
-    state.accounts = await api('/accounts');
-    renderCampaigns();
-    populateAccountDropdown('cf-account', state.accounts);
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-function renderCampaigns() {
-  const rows = state.campaigns;
-  el('campaigns-table').innerHTML = rows.length ? `<table>
-    <thead><tr>
-      <th>Name</th><th>Account</th><th>Status</th><th>Daily Limit</th><th>Actions</th>
-    </tr></thead>
-    <tbody id="campaigns-tbody">${rows.map(r => campaignRow(r)).join('')}</tbody>
-  </table>` : '<div class="no-data">No campaigns yet</div>';
-}
-
-function campaignRow(r) {
-  const days = (r.send_days || 'mon,tue,wed,thu,fri').split(',');
-  const allDays = ['mon','tue','wed','thu','fri','sat','sun'];
-  const accountOptions = state.accounts.map(a =>
-    `<option value="${a.id}" ${a.id === r.account_id ? 'selected' : ''}>${a.email}</option>`
-  ).join('');
-
-  return `
-  <tr class="clickable-row" onclick="toggleSteps(${r.id})" id="cr-${r.id}">
-    <td><strong>${r.name}</strong></td>
-    <td>${r.account_email || '—'}</td>
-    <td>${statusBadge(r.status)}</td>
-    <td>${r.daily_limit}/day</td>
-    <td onclick="event.stopPropagation()" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-      <select onchange="updateCampaignStatus(${r.id}, this.value)" style="width:110px;padding:4px 6px;font-size:12px">
-        ${['draft','active','paused','completed'].map(s => `<option ${s===r.status?'selected':''}>${s}</option>`).join('')}
-      </select>
-      <button class="btn btn-ghost btn-sm" onclick="toggleEditCampaign(${r.id})">Edit</button>
-      <button class="btn btn-danger btn-sm" onclick="deleteCampaign(${r.id})">Delete</button>
-    </td>
-  </tr>
-  <tr id="edit-row-${r.id}" style="display:none">
-    <td colspan="5" style="padding:0;background:#1a1a1a;border-bottom:1px solid #333">
-      <div style="padding:16px">
-        <div style="font-weight:600;font-size:13px;margin-bottom:12px;color:#aaa">Edit Campaign</div>
-        <div class="form-row">
-          <div class="form-group"><label>Name</label><input id="ef-name-${r.id}" value="${r.name}"></div>
-          <div class="form-group"><label>Sending Account</label><select id="ef-account-${r.id}">${accountOptions}</select></div>
-          <div class="form-group" style="max-width:120px"><label>Daily Limit</label><input id="ef-limit-${r.id}" type="number" value="${r.daily_limit}"></div>
-        </div>
-        <div class="form-row">
-          <div class="form-group"><label>Send Days</label>
-            <div class="checkboxes">
-              ${allDays.map(d => `<label><input type="checkbox" class="ef-day-${r.id}" value="${d}" ${days.includes(d)?'checked':''}> ${d.charAt(0).toUpperCase()+d.slice(1)}</label>`).join('')}
-            </div>
-          </div>
-          <div class="form-group" style="max-width:110px"><label>Start Hour</label><input id="ef-start-${r.id}" type="number" value="${r.send_start_hour}" min="0" max="23"></div>
-          <div class="form-group" style="max-width:110px"><label>End Hour</label><input id="ef-end-${r.id}" type="number" value="${r.send_end_hour}" min="0" max="23"></div>
-        </div>
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-primary btn-sm" onclick="saveEditCampaign(${r.id})">Save Changes</button>
-          <button class="btn btn-ghost btn-sm" onclick="toggleEditCampaign(${r.id})">Cancel</button>
-        </div>
-      </div>
-    </td>
-  </tr>
-  <tr id="steps-row-${r.id}" style="display:none">
-    <td colspan="5" class="steps-row"><div class="steps-inner" id="steps-inner-${r.id}"></div></td>
-  </tr>`;
-}
-
-function toggleEditCampaign(id) {
-  const row = el(`edit-row-${id}`);
-  // Close steps if open
-  const stepsRow = el(`steps-row-${id}`);
-  if (stepsRow) stepsRow.style.display = 'none';
-  row.style.display = row.style.display === 'none' ? '' : 'none';
-}
-
-async function saveEditCampaign(id) {
-  const selectedDays = [...document.querySelectorAll(`.ef-day-${id}:checked`)].map(c => c.value).join(',');
-  const body = {
-    name: el(`ef-name-${id}`).value.trim(),
-    account_id: parseInt(el(`ef-account-${id}`).value),
-    daily_limit: parseInt(el(`ef-limit-${id}`).value),
-    send_days: selectedDays || 'mon,tue,wed,thu,fri',
-    send_start_hour: parseInt(el(`ef-start-${id}`).value),
-    send_end_hour: parseInt(el(`ef-end-${id}`).value),
-  };
-  if (!body.name) { toast('Name is required', 'error'); return; }
-  try {
-    await api(`/campaigns/${id}`, { method: 'PUT', body: JSON.stringify(body) });
-    toast('Campaign updated', 'success');
-    el(`edit-row-${id}`).style.display = 'none';
-    loadCampaigns();
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-async function toggleSteps(id) {
-  // Close edit row if open
-  const editRow = el(`edit-row-${id}`);
-  if (editRow) editRow.style.display = 'none';
-
-  const row = el(`steps-row-${id}`);
-  if (row.style.display === 'none') {
-    row.style.display = '';
-    state.expandedCampaign = id;
-    await loadSteps(id);
-  } else {
-    row.style.display = 'none';
-    state.expandedCampaign = null;
-  }
-}
-
-async function loadSteps(campaignId) {
-  const inner = el(`steps-inner-${campaignId}`);
-  inner.innerHTML = '<div class="loading"><span class="spinner"></span></div>';
-  try {
-    const steps = await api(`/campaigns/${campaignId}/steps`);
-    const nextStep = steps.length ? Math.max(...steps.map(s => s.step_number)) + 1 : 1;
-
-    const timelineHtml = steps.length ? '<div class="step-timeline">' +
-      steps.map(s => {
-          const preview = s.body.slice(0, 100).replace(/\n/g, ' ') + (s.body.length > 100 ? '…' : '');
-          const dayLabel = s.delay_days === 0 ? 'Send on day 0 (immediately)' : 'Send on day ' + s.delay_days;
-          const stepDataJson = JSON.stringify({subject:s.subject,body:s.body,campaignId:campaignId,stepId:s.id});
-          return '<div class="step-item">' +
-            '<div class="step-circle">' + s.step_number + '</div>' +
-            '<div class="step-card">' +
-              '<div class="step-card-top">' +
-                '<div class="step-subject">' + s.subject + '</div>' +
-                '<span class="step-badge">' + dayLabel + '</span>' +
-              '</div>' +
-              '<div class="step-preview">' + preview + '</div>' +
-              '<div class="step-actions">' +
-                '<button class="btn btn-ghost btn-sm" onclick="previewStep(this)">Preview</button>' +
-                '<button class="btn btn-danger btn-sm" onclick="deleteStep(' + campaignId + ',' + s.id + ')">Delete</button>' +
-              '</div>' +
-              '<script type="application/json" class="step-data">' + stepDataJson + '<\/script>' +
-            '</div>' +
-          '</div>';
-        }).join('') +
-      '</div>' : '<div class="text-muted" style="margin-bottom:20px;font-size:13px">No steps yet — add your first step below.</div>';
-
-    inner.innerHTML = `
-      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#555;margin-bottom:16px">Sequence</div>
-      ${timelineHtml}
-      <div class="add-step-form">
-        <h4>Add Step</h4>
-        <div class="form-row">
-          <div class="form-group" style="max-width:90px">
-            <label>Step #</label>
-            <input id="sf-num-${campaignId}" type="number" value="0" min="1">
-          </div>
-          <div class="form-group" style="max-width:120px">
-            <label>Delay (days)</label>
-            <input id="sf-delay-${campaignId}" type="number" value="0" min="0">
-          </div>
-          <div class="form-group">
-            <label>Subject Line</label>
-            <input id="sf-subj-${campaignId}" placeholder="{{first_name}}, quick question about {{company}}">
-          </div>
-        </div>
-        <div class="form-group" style="margin-bottom:4px">
-          <label>Email Body</label>
-          <textarea id="sf-body-${campaignId}" rows="7" placeholder="Hi {{first_name}},&#10;&#10;{{personalized_line}}&#10;&#10;Would love to connect — are you free for a quick call this week?&#10;&#10;Best,"></textarea>
-        </div>
-        <div class="helper-text">You can use variables: {{first_name}} {{company}} {{personalized_line}}</div>
-        <div style="margin-top:14px">
-          <button class="btn btn-primary" onclick="saveStep(${campaignId})">Save Step</button>
-        </div>
-      </div>
-    `;
-
-    document.getElementById('sf-num-' + campaignId).value = nextStep;
-    document.getElementById('sf-delay-' + campaignId).value = steps.length === 0 ? 0 : 3;
-  } catch(e) { inner.innerHTML = `<div style="color:#ef4444">${e.message}</div>`; }
-}
-
-async function saveStep(campaignId) {
-  const payload = {
-    step_number: parseInt(el(`sf-num-${campaignId}`).value),
-    delay_days: parseInt(el(`sf-delay-${campaignId}`).value) || 0,
-    subject: el(`sf-subj-${campaignId}`).value.trim(),
-    body: el(`sf-body-${campaignId}`).value.trim(),
-  };
-  if (!payload.subject) { toast('Subject is required', 'error'); return; }
-  if (!payload.body) { toast('Body is required', 'error'); return; }
-  try {
-    await api(`/campaigns/${campaignId}/steps`, { method: 'POST', body: JSON.stringify(payload) });
-    toast(`Step #${payload.step_number} saved`, 'success');
-    loadSteps(campaignId);
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-async function deleteStep(campaignId, stepId) {
-  if (!confirm('Delete this step?')) return;
-  try {
-    await api(`/campaigns/${campaignId}/steps/${stepId}`, { method: 'DELETE' });
-    toast('Step deleted', 'success');
-    loadSteps(campaignId);
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-function toggleCreateCampaign() {
-  el('campaign-form').classList.toggle('open');
-}
-
-async function saveCampaign() {
-  const days = [...document.querySelectorAll('.send-day:checked')].map(c => c.value).join(',');
-  const body = {
-    name: el('cf-name').value.trim(),
-    account_id: parseInt(el('cf-account').value),
-    daily_limit: parseInt(el('cf-limit').value),
-    send_days: days || 'mon,tue,wed,thu,fri',
-    send_start_hour: parseInt(el('cf-start').value),
-    send_end_hour: parseInt(el('cf-end').value),
-  };
-  if (!body.name || !body.account_id) { toast('Name and account required', 'error'); return; }
-  try {
-    await api('/campaigns', { method: 'POST', body: JSON.stringify(body) });
-    toast('Campaign created', 'success');
-    el('campaign-form').classList.remove('open');
-    el('cf-name').value = '';
-    loadCampaigns();
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-async function updateCampaignStatus(id, status) {
-  try {
-    await api(`/campaigns/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
-    toast(`Status → ${status}`, 'success');
-    loadCampaigns();
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-async function deleteCampaign(id) {
-  if (!confirm('Delete this campaign and its steps?')) return;
-  try {
-    await api(`/campaigns/${id}`, { method: 'DELETE' });
-    toast('Campaign deleted', 'success');
-    loadCampaigns();
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-function populateAccountDropdown(id, accounts) {
-  el(id).innerHTML = accounts.map(a => `<option value="${a.id}">${a.email}</option>`).join('');
-}
-
-// ─── Leads ───────────────────────────────────────────────────────────────────
-async function loadLeads() {
-  try {
-    const campaigns = await api('/campaigns');
-    state.campaigns = campaigns;
-    const filter = el('leads-campaign-filter');
-    const current = filter.value;
-    filter.innerHTML = '<option value="">All Campaigns</option>' +
-      campaigns.map(c => `<option value="${c.id}" ${c.id==current?'selected':''}>${c.name}</option>`).join('');
-
-    // populate import panel dropdown
-    el('import-campaign').innerHTML = campaigns.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-
-    const campaignId = filter.value;
-    const url = campaignId ? `/leads?campaign_id=${campaignId}` : '/leads';
-    state.leads = await api(url);
-
-    const stats = await api('/leads/stats');
-    renderLeadStats(stats);
-    renderLeads(state.leads);
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-function renderLeadStats(stats) {
-  const statuses = ['active','replied','finished','bounced','unsubscribed'];
-  el('lead-stats').innerHTML = statuses.map(s =>
-    `<div class="stat-card" style="padding:10px 14px;min-width:90px">
-      <div class="label" style="font-size:10px">${s}</div>
-      <div class="value" style="font-size:20px">${stats[s] ?? 0}</div>
-    </div>`
-  ).join('');
-}
-
-function renderLeads(rows) {
-  if (!rows.length) { el('leads-table').innerHTML = '<div class="no-data">No leads</div>'; return; }
-  el('leads-table').innerHTML = `<table>
-    <thead><tr>
-      <th onclick="sortLeads('first_name')">Name${sortIcon('leads','first_name')}</th>
-      <th onclick="sortLeads('email')">Email${sortIcon('leads','email')}</th>
-      <th onclick="sortLeads('company')">Company${sortIcon('leads','company')}</th>
-      <th onclick="sortLeads('status')">Status${sortIcon('leads','status')}</th>
-      <th onclick="sortLeads('current_step')">Step${sortIcon('leads','current_step')}</th>
-      <th onclick="sortLeads('next_send_date')">Next Send${sortIcon('leads','next_send_date')}</th>
-      <th>Actions</th>
-    </tr></thead>
-    <tbody>${rows.map(r => `<tr>
-      <td>${r.first_name || ''} ${r.last_name || ''}</td>
-      <td>${r.email}</td>
-      <td>${r.company || '—'}</td>
-      <td>${statusBadge(r.status)}</td>
-      <td>${r.current_step}</td>
-      <td>${r.next_send_date || '—'}</td>
-      <td style="display:flex;gap:6px">
-        <button class="btn btn-ghost btn-sm" onclick="resetLead(${r.id})">Reset</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteLead(${r.id})">✕</button>
-      </td>
-    </tr>`).join('')}</tbody>
-  </table>`;
-}
-
-function filterLeads() {
-  const q = el('lead-search').value.toLowerCase();
-  const filtered = q ? state.leads.filter(r =>
-    (r.first_name+' '+r.last_name).toLowerCase().includes(q) ||
-    r.email.toLowerCase().includes(q) ||
-    (r.company||'').toLowerCase().includes(q)
-  ) : state.leads;
-  renderLeads(filtered);
-}
-
-function sortLeads(key) {
-  state.leads = sortTable(state.leads, key, 'leads');
-  renderLeads(state.leads);
-}
-
-async function resetLead(id) {
-  try {
-    await api(`/leads/${id}/reset`, { method: 'POST' });
-    toast('Lead reset to step 1', 'success');
-    loadLeads();
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-async function deleteLead(id) {
-  if (!confirm('Delete this lead?')) return;
-  try {
-    await api(`/leads/${id}`, { method: 'DELETE' });
-    toast('Lead deleted', 'success');
-    loadLeads();
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-function openImportPanel() {
-  el('import-panel').classList.add('open');
-  el('overlay').classList.add('open');
-  el('import-result').innerHTML = '';
-}
-function closeImportPanel() {
-  el('import-panel').classList.remove('open');
-  el('overlay').classList.remove('open');
-}
-
-async function importCSV() {
-  const campaignId = parseInt(el('import-campaign').value);
-  const csv = el('import-csv').value.trim();
-  if (!csv) { toast('Paste CSV content first', 'error'); return; }
-  try {
-    const r = await api('/leads/import', { method: 'POST', body: JSON.stringify({ campaign_id: campaignId, csv }) });
-    el('import-result').innerHTML = `<div style="color:#22c55e;font-size:13px">✓ ${r.imported} imported, ${r.skipped} skipped as duplicates</div>`;
-    toast(`${r.imported} leads imported`, 'success');
-    loadLeads();
-  } catch(e) {
-    el('import-result').innerHTML = `<div style="color:#ef4444;font-size:13px">${e.message}</div>`;
-    toast(e.message, 'error');
-  }
-}
-
-// ─── Accounts ────────────────────────────────────────────────────────────────
-async function loadAccounts() {
-  try {
-    state.accounts = await api('/accounts');
-    renderAccounts(state.accounts);
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-function renderAccounts(rows) {
-  el('accounts-table').innerHTML = rows.length ? `<table>
-    <thead><tr>
-      <th onclick="sortAccounts('email')">Email${sortIcon('accounts','email')}</th>
-      <th>Domain</th>
-      <th onclick="sortAccounts('daily_limit')">Daily Limit${sortIcon('accounts','daily_limit')}</th>
-      <th>Sent Today</th>
-      <th onclick="sortAccounts('status')">Status${sortIcon('accounts','status')}</th>
-      <th></th>
-    </tr></thead>
-    <tbody>${rows.map(r => {
-      const pct = Math.min(100, Math.round((r.emails_sent_today / r.daily_limit) * 100)) || 0;
-      return `<tr>
-        <td>${r.email}</td>
-        <td>${r.domain || '—'}</td>
-        <td>${r.daily_limit}</td>
-        <td>
-          <div style="display:flex;align-items:center;gap:8px">
-            <div class="progress" style="width:70px"><div class="progress-fill" style="width:${pct}%"></div></div>
-            <span style="font-size:12px;color:#888">${r.emails_sent_today}/${r.daily_limit}</span>
-          </div>
-        </td>
-        <td>${statusBadge(r.status)}</td>
-        <td style="display:flex;gap:6px">
-          <select onchange="updateAccountStatus(${r.id},this.value)" style="width:100px;padding:4px 6px;font-size:12px">
-            ${['warming','ready','paused','flagged'].map(s=>`<option ${s===r.status?'selected':''}>${s}</option>`).join('')}
-          </select>
-          <button class="btn btn-danger btn-sm" onclick="deleteAccount(${r.id})">✕</button>
-        </td>
-      </tr>`;
-    }).join('')}</tbody>
-  </table>` : '<div class="no-data">No sending accounts yet</div>';
-}
-
-function sortAccounts(key) {
-  state.accounts = sortTable(state.accounts, key, 'accounts');
-  renderAccounts(state.accounts);
-}
-
-async function addAccount() {
-  const body = {
-    email: el('acc-email').value.trim(),
-    app_password: el('acc-pass').value.trim(),
-    domain: el('acc-domain').value.trim(),
-    daily_limit: parseInt(el('acc-limit').value) || 20,
-  };
-  if (!body.email || !body.app_password) { toast('Email and password required', 'error'); return; }
-  try {
-    await api('/accounts', { method: 'POST', body: JSON.stringify(body) });
-    toast('Account added', 'success');
-    el('acc-email').value = ''; el('acc-pass').value = ''; el('acc-domain').value = '';
-    loadAccounts();
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-async function updateAccountStatus(id, status) {
-  try {
-    await api(`/accounts/${id}`, { method: 'PUT', body: JSON.stringify({ status }) });
-    toast(`Status → ${status}`, 'success');
-    loadAccounts();
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-async function deleteAccount(id) {
-  if (!confirm('Delete this account?')) return;
-  try {
-    await api(`/accounts/${id}`, { method: 'DELETE' });
-    toast('Account deleted', 'success');
-    loadAccounts();
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-// ─── Settings ────────────────────────────────────────────────────────────────
-function loadSettings() {
-  const token = localStorage.getItem('hs_token') || '';
-  el('hs-token').value = token ? '••••••••••••••••••••' : '';
-  el('hs-token').dataset.real = token;
-  el('hs-token').addEventListener('focus', function() { this.value = this.dataset.real; }, { once: false });
-  el('hs-token').addEventListener('blur', function() {
-    if (this.value && this.value !== this.dataset.real) {
-      this.dataset.real = this.value;
-    }
-    if (this.value) this.value = '••••••••••••••••••••';
-  });
-}
-
-async function saveHubspotToken() {
-  const token = el('hs-token').dataset.real || el('hs-token').value;
-  if (!token || token.includes('•')) { toast('Enter a valid token', 'error'); return; }
-  localStorage.setItem('hs_token', token);
-  try {
-    await api('/dashboard/settings/token', { method: 'POST', body: JSON.stringify({ token }) });
-    toast('HubSpot token saved and active', 'success');
-    el('hs-status').innerHTML = '<span style="color:#22c55e">✓ Token pushed to server</span>';
-  } catch(e) {
-    toast('Saved locally but failed to push to server: ' + e.message, 'error');
-  }
-}
-
-async function restoreHubspotToken() {
-  const token = localStorage.getItem('hs_token');
-  if (!token) return;
-  try {
-    await fetch('/dashboard/settings/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ token }),
-    });
-  } catch { /* non-critical — server may be restarting */ }
-}
-
-async function testHubspot() {
-  try {
-    const s = await api('/dashboard/stats');
-    el('hs-status').innerHTML = s.hubspot_connected
-      ? '<span style="color:#22c55e">✓ Connected to HubSpot</span>'
-      : '<span style="color:#ef4444">✗ Not connected — check token and scopes</span>';
-  } catch(e) {
-    el('hs-status').innerHTML = `<span style="color:#ef4444">${e.message}</span>`;
-  }
-}
-
-// ─── Email Preview Modal ──────────────────────────────────────────────────────
-const PREVIEW_VARS = {
-  first_name: 'Alex',
-  last_name: 'Johnson',
-  company: 'Acme Studio',
-  personalized_line: 'noticed your recent rebrand looks sharp',
-};
-
-function interpolatePreview(text) {
-  return text.replace(/\{\{(\w+)\}\}/g, (_, key) => PREVIEW_VARS[key] ?? `{{${key}}}`);
-}
-
-function capitalizeSentencesPreview(text) {
-  return text.replace(/(^\s*|[.!?]\s+)([a-z])/g, (_, pre, letter) => pre + letter.toUpperCase());
-}
-
-function buildPreviewHtml(text) {
-  const processed = capitalizeSentencesPreview(interpolatePreview(text));
-  return processed
-    .split(/\n\s*\n/)
-    .map(b => b.trim())
-    .filter(Boolean)
-    .map(block => {
-      const lines = block.split('\n').map(l => l.trim()).join('<br>');
-      return `<p style="margin:0 0 14px 0;font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#222">${lines}</p>`;
-    })
-    .join('');
-}
-
-let previewStepId = null;
-let previewCampaignId = null;
-
-function previewStep(btn) {
-  const card = btn.closest('.step-card');
-  const dataEl = card.querySelector('.step-data');
-  if (!dataEl) return;
-  const data = JSON.parse(dataEl.textContent);
-  const { subject, body, campaignId, stepId } = data;
-
-  previewStepId = stepId;
-  previewCampaignId = campaignId;
-
-  const campaign = state.campaigns.find(c => c.id === campaignId);
-  const fromEmail = campaign?.account_email || 'your@domain.com';
-
-  el('preview-from').textContent = fromEmail;
-  el('preview-subject').textContent = interpolatePreview(subject);
-  el('preview-body').innerHTML = `
-    <div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#222222;max-width:600px">
-      ${buildPreviewHtml(body)}
-    </div>`;
-
-  el('test-email-input').value = '';
-  el('preview-modal').classList.add('open');
-  document.body.style.overflow = 'hidden';
-  setTimeout(() => el('test-email-input').focus(), 100);
-}
-
-function closePreviewModal(e) {
-  if (e && e.target !== el('preview-modal')) return;
-  el('preview-modal').classList.remove('open');
-  document.body.style.overflow = '';
-}
-
-async function sendTestEmail() {
-  const testEmail = el('test-email-input').value.trim();
-  if (!testEmail) { toast('Enter an email address first', 'error'); return; }
-  if (!previewCampaignId || !previewStepId) { toast('No step selected', 'error'); return; }
-
-  const btn = el('test-email-input').nextElementSibling;
-  const origText = btn.textContent;
-  btn.textContent = 'Sending…';
-  btn.disabled = true;
-
-  try {
-    await api(`/campaigns/${previewCampaignId}/steps/${previewStepId}/test`, {
-      method: 'POST',
-      body: JSON.stringify({ test_email: testEmail }),
-    });
-    toast(`Test email sent to ${testEmail}`, 'success');
-    el('test-email-input').value = '';
-  } catch(e) {
-    toast(e.message, 'error');
-  } finally {
-    btn.textContent = origText;
-    btn.disabled = false;
-  }
-}
-
-// ─── Boot ────────────────────────────────────────────────────────────────────
-['wa-pass', 'acc-pass'].forEach(id => {
-  el(id).addEventListener('input', (e) => {
-    e.target.value = e.target.value.replace(/\s/g, '');
-  });
-});
-
-restoreHubspotToken();
-navigate('campaign-dashboard');
-</script>
+<script src="/public/js/api.js"></script>
+<script src="/public/js/auth.js"></script>
+<script src="/public/js/dashboard.js"></script>
+<script src="/public/js/warmup.js"></script>
+<script src="/public/js/campaigns.js"></script>
+<script src="/public/js/leads.js"></script>
+<script src="/public/js/accounts.js"></script>
+<script src="/public/js/navigation.js"></script>
 </body>
 </html>

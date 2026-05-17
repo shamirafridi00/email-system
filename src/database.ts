@@ -105,6 +105,9 @@ export function initDatabase() {
     );
   `);
 
+  // Add conversation_id column to warmup_log if it doesn't exist yet (migration)
+  try { db.exec("ALTER TABLE warmup_log ADD COLUMN conversation_id TEXT DEFAULT 'auto'"); } catch {}
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS conversation_files (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

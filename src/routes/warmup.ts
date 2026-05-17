@@ -40,6 +40,13 @@ app.post("/accounts", async (c) => {
   return c.json({ id: result.lastInsertRowid, email: body.email }, 201);
 });
 
+app.put("/accounts/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  const body = await c.req.json<{ active: number }>();
+  db.run("UPDATE warmup_accounts SET active = ? WHERE id = ?", [body.active ? 1 : 0, id]);
+  return c.json({ success: true });
+});
+
 app.delete("/accounts/:id", (c) => {
   const id = Number(c.req.param("id"));
   db.run("DELETE FROM warmup_accounts WHERE id = ?", [id]);
@@ -113,23 +120,36 @@ app.get("/status", (c) => {
   return c.json({ warmup_running: row?.value === "1" });
 });
 
-app.get("/log", (c) => {
+app.get("/log/conversations", (c) => {
   const rows = db
-    .query<
-      {
-        id: number;
-        from_email: string;
-        to_email: string;
-        subject: string;
-        sent_at: string;
-        replied: number;
-      },
-      []
-    >(
-      "SELECT id, from_email, to_email, subject, sent_at, replied FROM warmup_log ORDER BY sent_at DESC LIMIT 100"
+    .query<{ conversation_id: string }, []>(
+      "SELECT DISTINCT conversation_id FROM warmup_log WHERE conversation_id IS NOT NULL ORDER BY conversation_id ASC"
     )
     .all();
+  return c.json(rows.map(function(r) { return r.conversation_id; }));
+});
+
+app.get("/log", (c) => {
+  const convId = c.req.query("conversation_id");
+  const rows = convId
+    ? db.query<
+        { id: number; from_email: string; to_email: string; subject: string; sent_at: string; replied: number; conversation_id: string },
+        [string]
+      >(
+        "SELECT id, from_email, to_email, subject, sent_at, replied, conversation_id FROM warmup_log WHERE conversation_id = ? ORDER BY sent_at DESC LIMIT 200"
+      ).all(convId)
+    : db.query<
+        { id: number; from_email: string; to_email: string; subject: string; sent_at: string; replied: number; conversation_id: string },
+        []
+      >(
+        "SELECT id, from_email, to_email, subject, sent_at, replied, conversation_id FROM warmup_log ORDER BY sent_at DESC LIMIT 200"
+      ).all();
   return c.json(rows);
+});
+
+app.delete("/log", (c) => {
+  db.run("DELETE FROM warmup_log");
+  return c.json({ success: true });
 });
 
 app.get("/stats", (c) => {

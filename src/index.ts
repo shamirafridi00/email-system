@@ -28,6 +28,16 @@ app.get("/login", (c) => {
   return c.html(html);
 });
 
+app.get("/public/*", (c) => {
+  const filePath = join(import.meta.dir, "../", c.req.path);
+  try {
+    const file = Bun.file(filePath);
+    return new Response(file);
+  } catch {
+    return c.text("Not found", 404);
+  }
+});
+
 // Everything below requires a valid session
 app.use("*", requireAuth);
 
@@ -37,16 +47,6 @@ app.get("/", (c) => {
     return c.html(html);
   } catch {
     return c.text("Email System running — drop index.html in /public to serve UI");
-  }
-});
-
-app.get("/public/*", (c) => {
-  const filePath = join(import.meta.dir, "../", c.req.path);
-  try {
-    const file = Bun.file(filePath);
-    return new Response(file);
-  } catch {
-    return c.text("Not found", 404);
   }
 });
 

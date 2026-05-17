@@ -19,6 +19,7 @@ interface ConversationEmail {
 }
 
 interface ConversationFile {
+  conversation_id?: string;
   emails: ConversationEmail[];
 }
 
@@ -81,6 +82,8 @@ export function processConversationFile(filePath: string): void {
     return;
   }
 
+  const conversationId = parsed.conversation_id || "auto";
+
   for (const email of parsed.emails) {
     setTimeout(
       async () => {
@@ -111,8 +114,8 @@ export function processConversationFile(filePath: string): void {
           });
 
           db.run(
-            "INSERT INTO warmup_log (from_email, to_email, subject) VALUES (?, ?, ?)",
-            [fromAccount.email, email.to, email.subject]
+            "INSERT INTO warmup_log (from_email, to_email, subject, conversation_id) VALUES (?, ?, ?, ?)",
+            [fromAccount.email, email.to, email.subject, conversationId]
           );
 
           console.log(
@@ -177,7 +180,7 @@ export async function runWarmupAll(): Promise<void> {
       });
 
       db.run(
-        "INSERT INTO warmup_log (from_email, to_email, subject, replied) VALUES (?, ?, ?, 0)",
+        "INSERT INTO warmup_log (from_email, to_email, subject, replied, conversation_id) VALUES (?, ?, ?, 0, 'auto')",
         [sender.email, receiver.email, subject]
       );
 
@@ -201,7 +204,7 @@ export async function runWarmupAll(): Promise<void> {
       });
 
       db.run(
-        "INSERT INTO warmup_log (from_email, to_email, subject, replied) VALUES (?, ?, ?, 1)",
+        "INSERT INTO warmup_log (from_email, to_email, subject, replied, conversation_id) VALUES (?, ?, ?, 1, 'auto')",
         [receiver.email, sender.email, replySubject]
       );
 
