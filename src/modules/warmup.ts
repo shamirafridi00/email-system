@@ -179,10 +179,45 @@ export async function runWarmupAll(): Promise<void> {
         text: body,
       });
 
+      const pairId = `${sender.email}:${receiver.email}`;
       db.run(
-        "INSERT INTO warmup_log (from_email, to_email, subject, replied, conversation_id) VALUES (?, ?, ?, 0, 'auto')",
-        [sender.email, receiver.email, subject]
+        "INSERT INTO warmup_log (from_email, to_email, subject, replied, conversation_id, pair_id) VALUES (?, ?, ?, 0, 'auto', ?)",
+        [sender.email, receiver.email, subject, pairId]
       );
+
+      // Set warmup_started_at if this is the first send for this account
+      const senderRecord = db
+        .query<{ warmup_started_at: string | null }, [number]>(
+          "SELECT warmup_started_at FROM warmup_accounts WHERE id = ?"
+        )
+        .get(sender.id);
+      if (!senderRecord?.warmup_started_at) {
+        db.run("UPDATE warmup_accounts SET warmup_started_at = CURRENT_TIMESTAMP WHERE id = ?", [sender.id]);
+      }
+
+      // Reset consecutive failures on success
+      db.run(
+        "UPDATE warmup_accounts SET consecutive_failures = 0 WHERE id = ?",
+        [sender.id]
+      );
+
+      // Update warmup_pairs table
+      const existingPair = db
+        .query<{ id: number }, [string, string]>(
+          "SELECT id FROM warmup_pairs WHERE sender_email = ? AND receiver_email = ?"
+        )
+        .get(sender.email, receiver.email);
+      if (existingPair) {
+        db.run(
+          "UPDATE warmup_pairs SET last_paired_at = CURRENT_TIMESTAMP, pair_count = pair_count + 1 WHERE id = ?",
+          [existingPair.id]
+        );
+      } else {
+        db.run(
+          "INSERT INTO warmup_pairs (sender_email, receiver_email) VALUES (?, ?)",
+          [sender.email, receiver.email]
+        );
+      }
 
       console.log(`Warmup sent: ${sender.email} → ${receiver.email} | ${subject}`);
 
@@ -203,10 +238,45 @@ export async function runWarmupAll(): Promise<void> {
         text: replyBody,
       });
 
+      const replyPairId = `${receiver.email}:${sender.email}`;
       db.run(
-        "INSERT INTO warmup_log (from_email, to_email, subject, replied, conversation_id) VALUES (?, ?, ?, 1, 'auto')",
-        [receiver.email, sender.email, replySubject]
+        "INSERT INTO warmup_log (from_email, to_email, subject, replied, conversation_id, pair_id) VALUES (?, ?, ?, 1, 'auto', ?)",
+        [receiver.email, sender.email, replySubject, replyPairId]
       );
+
+      // Set warmup_started_at for receiver if needed
+      const receiverRecord = db
+        .query<{ warmup_started_at: string | null }, [number]>(
+          "SELECT warmup_started_at FROM warmup_accounts WHERE id = ?"
+        )
+        .get(receiver.id);
+      if (!receiverRecord?.warmup_started_at) {
+        db.run("UPDATE warmup_accounts SET warmup_started_at = CURRENT_TIMESTAMP WHERE id = ?", [receiver.id]);
+      }
+
+      // Reset consecutive failures for receiver on success
+      db.run(
+        "UPDATE warmup_accounts SET consecutive_failures = 0 WHERE id = ?",
+        [receiver.id]
+      );
+
+      // Update warmup_pairs for reply direction
+      const existingReplyPair = db
+        .query<{ id: number }, [string, string]>(
+          "SELECT id FROM warmup_pairs WHERE sender_email = ? AND receiver_email = ?"
+        )
+        .get(receiver.email, sender.email);
+      if (existingReplyPair) {
+        db.run(
+          "UPDATE warmup_pairs SET last_paired_at = CURRENT_TIMESTAMP, pair_count = pair_count + 1 WHERE id = ?",
+          [existingReplyPair.id]
+        );
+      } else {
+        db.run(
+          "INSERT INTO warmup_pairs (sender_email, receiver_email) VALUES (?, ?)",
+          [receiver.email, sender.email]
+        );
+      }
 
       console.log(
         `Warmup reply: ${receiver.email} → ${sender.email} | ${replySubject}`
@@ -215,6 +285,11 @@ export async function runWarmupAll(): Promise<void> {
       console.error(
         `Warmup cycle failed (${sender.email} → ${receiver.email}):`,
         err
+      );
+      // Track failure on sender account
+      db.run(
+        "UPDATE warmup_accounts SET consecutive_failures = consecutive_failures + 1, last_failure_at = CURRENT_TIMESTAMP WHERE id = ?",
+        [sender.id]
       );
     }
   }

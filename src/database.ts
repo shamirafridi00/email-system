@@ -105,8 +105,61 @@ export function initDatabase() {
     );
   `);
 
-  // Add conversation_id column to warmup_log if it doesn't exist yet (migration)
+  // warmup_accounts migrations
+  try { db.exec("ALTER TABLE warmup_accounts ADD COLUMN warmup_started_at DATETIME DEFAULT NULL"); } catch {}
+  try { db.exec("ALTER TABLE warmup_accounts ADD COLUMN warmup_target_days INTEGER DEFAULT 14"); } catch {}
+  try { db.exec("ALTER TABLE warmup_accounts ADD COLUMN health_score INTEGER DEFAULT 0"); } catch {}
+  try { db.exec("ALTER TABLE warmup_accounts ADD COLUMN last_verified_at DATETIME DEFAULT NULL"); } catch {}
+  try { db.exec("ALTER TABLE warmup_accounts ADD COLUMN status TEXT DEFAULT 'warming'"); } catch {}
+  try { db.exec("ALTER TABLE warmup_accounts ADD COLUMN daily_target INTEGER DEFAULT 5"); } catch {}
+  try { db.exec("ALTER TABLE warmup_accounts ADD COLUMN group_name TEXT DEFAULT 'default'"); } catch {}
+  try { db.exec("ALTER TABLE warmup_accounts ADD COLUMN notes TEXT DEFAULT ''"); } catch {}
+  try { db.exec("ALTER TABLE warmup_accounts ADD COLUMN last_failure_at DATETIME DEFAULT NULL"); } catch {}
+  try { db.exec("ALTER TABLE warmup_accounts ADD COLUMN consecutive_failures INTEGER DEFAULT 0"); } catch {}
+
+  // warmup_log migrations
   try { db.exec("ALTER TABLE warmup_log ADD COLUMN conversation_id TEXT DEFAULT 'auto'"); } catch {}
+  try { db.exec("ALTER TABLE warmup_log ADD COLUMN pair_id TEXT DEFAULT NULL"); } catch {}
+  try { db.exec("ALTER TABLE warmup_log ADD COLUMN topic TEXT DEFAULT NULL"); } catch {}
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS warmup_schedule (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER,
+      scheduled_date DATE,
+      target_emails INTEGER DEFAULT 5,
+      sent_emails INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'pending',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS warmup_conversations_library (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      topic TEXT,
+      subject TEXT,
+      body_sender TEXT,
+      body_receiver TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS account_status_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER,
+      account_email TEXT,
+      previous_status TEXT,
+      new_status TEXT,
+      reason TEXT,
+      changed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS warmup_pairs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sender_email TEXT,
+      receiver_email TEXT,
+      last_paired_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      pair_count INTEGER DEFAULT 1
+    );
+  `);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS conversation_files (
@@ -117,6 +170,74 @@ export function initDatabase() {
       status TEXT DEFAULT 'scheduled'
     );
   `);
+
+  // Seed warmup_conversations_library with web design industry conversation pairs
+  const seedConversations = db.prepare("SELECT COUNT(*) as count FROM warmup_conversations_library").get() as { count: number };
+  if (seedConversations.count === 0) {
+    db.exec(`
+      INSERT INTO warmup_conversations_library (topic, subject, body_sender, body_receiver) VALUES
+      (
+        'project kickoff',
+        'Kicking Off the Redesign Project',
+        'Hi Sarah, excited to officially kick off the website redesign! I''ve reviewed the brief and I think we have a strong foundation. I''ll have the initial sitemap and wireframes ready by end of week. Can we schedule a quick call Thursday to align before I dive into the visuals?',
+        'Hi Marcus, thrilled to get started! Thursday works great — how does 2pm EST sound? I''ll also send over a few competitor sites we like for reference. Looking forward to seeing your direction on this.'
+      ),
+      (
+        'design feedback',
+        'Re: Homepage Concepts — Your Thoughts?',
+        'Hey Lisa, I''ve attached the three homepage concepts we discussed. Concept B leans into the bold typography direction you mentioned, while Concept A is a safer, more corporate feel. Would love to hear which direction resonates most before I build out the inner pages.',
+        'Hi Daniel, I really love the energy of Concept B — the typography feels fresh without being too risky. The hero section especially stands out. Can we keep the color palette a bit closer to our brand guidelines though? Let''s go with that direction and refine from there.'
+      ),
+      (
+        'revision request',
+        'A Few Tweaks on the About Page',
+        'Hi Priya, the about page is looking close but the client flagged a couple of things. They''d like the team photos to be larger and the bio text trimmed to two sentences each. Also, can we move the CTA button above the fold? Happy to jump on a call if easier.',
+        'Got it, no problem at all. I''ll resize the photos, trim the bios, and shift the CTA up. I can have the revised version back to you by tomorrow afternoon — does that timeline work on your end?'
+      ),
+      (
+        'invoice follow up',
+        'Following Up: Invoice #1042',
+        'Hi Jordan, I wanted to follow up on Invoice #1042 sent on the 3rd for the milestone two deliverables. Total is $2,400 and it''s now 10 days out. Please let me know if there are any issues with the invoice or if you need me to resend it.',
+        'Hi Alex, so sorry for the delay — this slipped through during a busy week. I''ve submitted it for payment today and you should see it clear within 3–5 business days. Thanks for the nudge and for your patience.'
+      ),
+      (
+        'meeting scheduling',
+        'Scheduling Our Mid-Project Check-In',
+        'Hi Tom, we''re about halfway through the project and I''d love to set up a 30-minute check-in to review progress and make sure we''re aligned before the final sprint. Are you free any time next Tuesday or Wednesday afternoon?',
+        'Hi Rachel, Wednesday afternoon works well for me. How does 3pm CST sound? I''ll send over a calendar invite. Looking forward to seeing where things stand — the mockups you shared last week looked really solid.'
+      ),
+      (
+        'project completion',
+        'Website is Live — Congratulations!',
+        'Hi Michelle, I''m thrilled to let you know that the new site is officially live! Everything has been tested across devices and browsers and is looking great. It''s been a pleasure working with your team on this. I''ll send over the final handoff doc with login credentials and instructions by end of day.',
+        'Oh wow, this is so exciting! The site looks absolutely incredible — our whole team is blown away. Thank you so much for all the hard work and for being so patient with our feedback along the way. We''ll definitely be in touch for future projects.'
+      ),
+      (
+        'referral thank you',
+        'Thank You for the Referral!',
+        'Hi James, I just got off a call with the team at Brightline Co. and they mentioned you sent them my way — that means a lot! I wanted to reach out personally to say thank you. Referrals like this are honestly the best part of doing good work. I hope we can collaborate again soon.',
+        'Of course! I had such a great experience working with you that it was an easy recommendation. They''re great people and I think it''ll be a natural fit. Hope it turns into something solid for you!'
+      ),
+      (
+        'scope change discussion',
+        'Quick Note on Scope — E-Commerce Addition',
+        'Hi Nina, the client has asked about adding a small e-commerce section to the project — essentially 5–10 product pages and a basic cart. I wanted to flag this before agreeing to anything on their end. It''s a meaningful addition and would likely require a revised timeline and budget. Can we chat about it?',
+        'Totally agree — that''s not a small ask. I''d estimate it adds at least two weeks and I''d need to scope the payment integration separately. Let''s draft a change order before we commit. I can put together a rough estimate tonight and we can align tomorrow. Sound good?'
+      ),
+      (
+        'timeline update',
+        'Quick Update on Project Timeline',
+        'Hi Carlos, I wanted to give you a heads up that we''re running about three days behind on the inner page designs. I had an unexpected family situation come up this week that impacted my schedule. I''m back on track now and confident I can still deliver before the launch deadline. I''ll send an updated schedule by tomorrow morning.',
+        'Hi Emily, thanks for being upfront about it — I really appreciate the communication. As long as the launch date holds, we''re fine. Take care of what you need to and just keep us in the loop. Looking forward to the updated schedule.'
+      ),
+      (
+        'portfolio review request',
+        'Would Love Your Feedback on My Updated Portfolio',
+        'Hi Kevin, I''ve just refreshed my portfolio with several new case studies including the Henderson rebrand we worked on together. I''d love to get your honest thoughts, especially on how I''ve presented the process work. No pressure at all — only if you have a few spare minutes.',
+        'Happy to take a look! I''ve always admired how thoughtfully you document your process. I''ll check it out this weekend and send over some notes. The Henderson project was one of my favorites — I''m sure it reads really well as a case study.'
+      );
+    `);
+  }
 
   // Seed warmup_running default if not already present
   db.exec("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('warmup_running', '1');");

@@ -13,6 +13,7 @@ function navigate(section) {
   });
   const loaders = {
     'warmup-dashboard': loadWarmupDashboard,
+    'warmup-progress': loadWarmupProgress,
     'warmup-accounts': loadWarmupAccounts,
     'conversations': loadConversations,
     'warmup-log': loadWarmupLog,

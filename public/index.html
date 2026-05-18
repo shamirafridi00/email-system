@@ -14,6 +14,7 @@
     <div class="nav-section warmup-section">
       <div class="nav-section-label"><span class="dot"></span>Warmup System</div>
       <a data-section="warmup-dashboard">📊 Warmup Dashboard</a>
+      <a data-section="warmup-progress">📈 Warmup Progress</a>
       <a data-section="warmup-accounts">🔥 Warmup Accounts</a>
       <a data-section="conversations">💬 Conversations</a>
       <a data-section="warmup-log">📋 Warmup Log</a>
@@ -26,6 +27,7 @@
       <a data-section="campaigns">📣 Campaigns</a>
       <a data-section="leads">👥 Leads</a>
       <a data-section="sending-accounts">⚙ Sending Accounts</a>
+      <a data-section="campaign-manual">📖 Campaign Manual</a>
     </div>
     <div class="nav-divider"></div>
     <div class="nav-section settings-section">
@@ -67,6 +69,23 @@
       </div>
     </div>
 
+    <!-- WARMUP PROGRESS -->
+    <div id="section-warmup-progress" class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Warmup Progress Tracker</div>
+          <div class="text-muted" style="font-size:13px;margin-top:2px">Track each account through the 14-day warmup journey</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button id="progress-sort-btn" class="btn btn-ghost" onclick="sortProgressByScore()">↓ Score: High to Low</button>
+          <button class="btn btn-ghost" onclick="loadWarmupProgress()">↻ Refresh</button>
+        </div>
+      </div>
+      <div id="warmup-progress-cards">
+        <div class="loading"><span class="spinner"></span></div>
+      </div>
+    </div>
+
     <!-- CAMPAIGN DASHBOARD -->
     <div id="section-campaign-dashboard" class="section">
       <div class="section-header">
@@ -101,6 +120,7 @@
         <div style="display:flex;gap:8px">
           <button class="btn btn-success" onclick="startWarmup()">▶ Start Warmup</button>
           <button class="btn btn-danger" onclick="stopWarmup()">■ Stop Warmup</button>
+          <button id="verify-all-btn" class="btn btn-ghost" onclick="verifyAllAccounts()">✓ Verify All</button>
         </div>
       </div>
       <div class="two-col">
@@ -132,7 +152,36 @@
         <div class="section-title">Conversations</div>
       </div>
       <div class="card" style="max-width:640px">
-        <h3>Upload Conversation JSON</h3>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <h3 style="margin:0">Upload Conversation JSON</h3>
+          <button class="btn btn-ghost btn-sm" onclick="toggleChatGPTPrompt()">Get ChatGPT Prompt</button>
+        </div>
+        <div id="chatgpt-prompt-panel" style="display:none;margin-bottom:20px;background:#111;border:1px solid #2a2a2a;border-radius:8px;padding:16px">
+          <div style="font-size:12px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">ChatGPT Prompt</div>
+          <textarea id="chatgpt-prompt-text" readonly rows="18" style="width:100%;background:#0d0d0d;border:1px solid #333;border-radius:6px;padding:10px 12px;font-size:12px;font-family:monospace;color:#ccc;resize:none;line-height:1.6;box-sizing:border-box">Generate a realistic business email conversation between two professionals in the web design and marketing industry. The conversation should feel completely natural, like real people discussing a project, follow up, or meeting. Output only valid JSON with no extra text, no markdown, no code blocks. Use exactly this format:
+
+{
+  "conversation_id": "conv_001",
+  "participants": {
+    "sender": "sender@gmail.com",
+    "receiver": "receiver@gmail.com"
+  },
+  "emails": [
+    {
+      "from": "sender@gmail.com",
+      "to": "receiver@gmail.com",
+      "subject": "subject here",
+      "body": "body here",
+      "send_after_minutes": 0
+    }
+  ]
+}
+
+Replace sender@gmail.com and receiver@gmail.com with two different email addresses from your warmup pool. Make 4 to 6 emails in the conversation. Use send_after_minutes values of 0, 15, 45, 90, 150, and 240 to spread emails naturally across the day. Topics should rotate between: project updates, meeting scheduling, feedback on designs, invoice follow ups, and revision requests. Never use generic phrases like "I hope this email finds you well".</textarea>
+          <div style="margin-top:10px;display:flex;justify-content:flex-end">
+            <button class="btn btn-primary btn-sm" onclick="copyConvPrompt()">Copy Prompt</button>
+          </div>
+        </div>
         <p style="font-size:13px;color:#666;margin-bottom:16px;line-height:1.6">Paste a ChatGPT-generated conversation JSON. Each email in the array will be scheduled and sent automatically at the specified delay.</p>
         <div class="form-group" style="margin-bottom:10px"><label>Filename</label><input id="conv-filename" placeholder="conversation_1.json"></div>
         <div class="form-group" style="margin-bottom:14px"><label>JSON Content</label><textarea id="conv-content" rows="10" placeholder='{"emails":[{"from":"a@gmail.com","to":"b@gmail.com","subject":"Hey","body":"Hi there","send_after_minutes":5}]}'></textarea></div>
@@ -445,6 +494,225 @@
               <div style="display:flex;gap:10px">
                 <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
                 <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Reset Log:</strong> Clears all warmup log entries permanently. Do this at the start of a fresh warmup cycle or after migrating accounts. Warmup accounts themselves are not affected — only the log records are deleted.</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- CAMPAIGN MANUAL -->
+    <div id="section-campaign-manual" class="section">
+      <div class="section-header">
+        <div class="section-title">Campaign Manual</div>
+      </div>
+
+      <div class="card" style="max-width:760px">
+        <div style="display:flex;flex-direction:column;gap:32px">
+
+          <!-- Section 1 -->
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <div style="width:32px;height:32px;border-radius:8px;background:#1e1b4b;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">📣</div>
+              <h2 style="margin:0;font-size:15px;font-weight:700;color:#fff">What is a Campaign?</h2>
+            </div>
+            <p style="margin:0;font-size:13px;line-height:1.75;color:#aaa">A campaign is an automated cold email sequence sent on behalf of a client to a list of leads. You define the emails (called steps), the sending schedule, and the sending account. The system then works through each lead automatically — sending step 1, waiting the configured delay, sending step 2, and so on — until the lead replies, unsubscribes, or finishes the sequence. Every campaign runs independently, so you can run multiple clients at the same time from different sending accounts.</p>
+          </div>
+
+          <div style="height:1px;background:#222"></div>
+
+          <!-- Section 2 -->
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <div style="width:32px;height:32px;border-radius:8px;background:#052e16;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">⚙</div>
+              <h2 style="margin:0;font-size:15px;font-weight:700;color:#fff">Sending Accounts</h2>
+            </div>
+            <p style="margin:0 0 12px 0;font-size:13px;line-height:1.75;color:#aaa">A sending account is the Gmail address that campaign emails are sent from. This should always be a custom domain address, not a personal Gmail.</p>
+            <div style="background:#111;border:1px solid #2a2a2a;border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Use a custom domain:</strong> Personal Gmail addresses (@gmail.com) have strict sending limits and are immediately flagged as spam in cold outreach. Use a domain you own — for example outreach@clientdomain.com — routed through Gmail via Google Workspace.</p>
+              </div>
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">App passwords:</strong> Go to the Google Account for the sending address → Security → 2-Step Verification → App passwords. Generate a password for "Mail" and paste it into the App Password field here. Do not use the regular account password.</p>
+              </div>
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Status:</strong> Set the account to <em style="color:#ddd">ready</em> before assigning it to a campaign. Accounts marked <em style="color:#ddd">warming</em> or <em style="color:#ddd">paused</em> will not send.</p>
+              </div>
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Daily limit:</strong> Controls the maximum number of emails this account sends per day across all campaigns. Start at 20–30 and raise it gradually after the domain is warmed up.</p>
+              </div>
+            </div>
+          </div>
+
+          <div style="height:1px;background:#222"></div>
+
+          <!-- Section 3 -->
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <div style="width:32px;height:32px;border-radius:8px;background:#1c1917;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">🗂</div>
+              <h2 style="margin:0;font-size:15px;font-weight:700;color:#fff">Campaign Settings</h2>
+            </div>
+            <p style="margin:0 0 12px 0;font-size:13px;line-height:1.75;color:#aaa">Each campaign has settings that control when and how fast emails go out. These apply to all leads in the campaign.</p>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <div style="display:flex;align-items:flex-start;border-radius:8px;overflow:hidden;border:1px solid #2a2a2a">
+                <div style="background:#1e293b;padding:11px 16px;font-size:12px;font-weight:700;color:#94a3b8;white-space:nowrap;width:130px;flex-shrink:0">Daily Limit</div>
+                <div style="flex:1;padding:11px 16px;font-size:13px;color:#aaa;border-left:1px solid #2a2a2a">Maximum emails sent per day for this campaign. Shared with the account-level daily limit — whichever is lower wins. Recommended: 20–40 for a warmed domain.</div>
+              </div>
+              <div style="display:flex;align-items:flex-start;border-radius:8px;overflow:hidden;border:1px solid #2a2a2a">
+                <div style="background:#1e293b;padding:11px 16px;font-size:12px;font-weight:700;color:#94a3b8;white-space:nowrap;width:130px;flex-shrink:0">Send Days</div>
+                <div style="flex:1;padding:11px 16px;font-size:13px;color:#aaa;border-left:1px solid #2a2a2a">Which days of the week emails go out. Default is Monday to Friday. Avoid weekends for B2B outreach — reply rates drop significantly on Sat and Sun.</div>
+              </div>
+              <div style="display:flex;align-items:flex-start;border-radius:8px;overflow:hidden;border:1px solid #2a2a2a">
+                <div style="background:#1e293b;padding:11px 16px;font-size:12px;font-weight:700;color:#94a3b8;white-space:nowrap;width:130px;flex-shrink:0">Send Hours</div>
+                <div style="flex:1;padding:11px 16px;font-size:13px;color:#aaa;border-left:1px solid #2a2a2a">The hour window (24h format) in which the scheduler is allowed to send. For example 9 to 17 means emails only go out between 9 AM and 5 PM. Best times for B2B are 8–10 AM and 1–3 PM in the recipient's timezone.</div>
+              </div>
+              <div style="display:flex;align-items:flex-start;border-radius:8px;overflow:hidden;border:1px solid #2a2a2a">
+                <div style="background:#1e293b;padding:11px 16px;font-size:12px;font-weight:700;color:#94a3b8;white-space:nowrap;width:130px;flex-shrink:0">Status</div>
+                <div style="flex:1;padding:11px 16px;font-size:13px;color:#aaa;border-left:1px solid #2a2a2a"><em style="color:#ddd">Draft</em> — not sending yet. <em style="color:#ddd">Active</em> — scheduler picks up leads and sends. <em style="color:#ddd">Paused</em> — sending stops but leads are preserved. <em style="color:#ddd">Completed</em> — archived, no further sends.</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="height:1px;background:#222"></div>
+
+          <!-- Section 4 -->
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <div style="width:32px;height:32px;border-radius:8px;background:#0c1a2e;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">🪜</div>
+              <h2 style="margin:0;font-size:15px;font-weight:700;color:#fff">Sequence Steps</h2>
+            </div>
+            <p style="margin:0 0 12px 0;font-size:13px;line-height:1.75;color:#aaa">Steps are the individual emails in a campaign sequence. Each lead receives them in order, with a configurable delay between each one. The scheduler only moves a lead to the next step if they have not replied or unsubscribed.</p>
+            <div style="background:#111;border:1px solid #2a2a2a;border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px;margin-bottom:12px">
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Delay days:</strong> How many days after the previous step before this email sends. Step 1 always sends immediately on the lead's first eligible send day. A delay of 3 on step 2 means it sends 3 days after step 1.</p>
+              </div>
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Variables:</strong> Use <code style="background:#1a1a1a;padding:1px 5px;border-radius:3px;font-size:12px">{{first_name}}</code>, <code style="background:#1a1a1a;padding:1px 5px;border-radius:3px;font-size:12px">{{company}}</code>, and <code style="background:#1a1a1a;padding:1px 5px;border-radius:3px;font-size:12px">{{personalized_line}}</code> anywhere in the subject or body. These are replaced with the lead's actual data when the email is sent.</p>
+              </div>
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Preview and test:</strong> Use the Preview button on each step to see the email rendered with sample data. Use Send Test to fire a real email to your own inbox before launching.</p>
+              </div>
+            </div>
+            <p style="margin:0 0 8px 0;font-size:12px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:.05em">Recommended 3-step sequence</p>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <div style="display:flex;align-items:flex-start;border-radius:8px;overflow:hidden;border:1px solid #2a2a2a">
+                <div style="background:#14532d;padding:11px 16px;font-size:12px;font-weight:700;color:#86efac;white-space:nowrap;width:90px;flex-shrink:0">Step 1</div>
+                <div style="flex:1;padding:11px 16px;font-size:13px;color:#aaa;border-left:1px solid #2a2a2a">Day 0. Short, personalised intro. One clear ask — a 15-minute call or a yes/no question. Under 100 words.</div>
+              </div>
+              <div style="display:flex;align-items:flex-start;border-radius:8px;overflow:hidden;border:1px solid #2a2a2a">
+                <div style="background:#1e293b;padding:11px 16px;font-size:12px;font-weight:700;color:#94a3b8;white-space:nowrap;width:90px;flex-shrink:0">Step 2</div>
+                <div style="flex:1;padding:11px 16px;font-size:13px;color:#aaa;border-left:1px solid #2a2a2a">Day 3. Brief follow-up referencing the first email. Add a different angle or a relevant case study. Under 80 words.</div>
+              </div>
+              <div style="display:flex;align-items:flex-start;border-radius:8px;overflow:hidden;border:1px solid #2a2a2a">
+                <div style="background:#1e293b;padding:11px 16px;font-size:12px;font-weight:700;color:#94a3b8;white-space:nowrap;width:90px;flex-shrink:0">Step 3</div>
+                <div style="flex:1;padding:11px 16px;font-size:13px;color:#aaa;border-left:1px solid #2a2a2a">Day 7. Final breakup email. Keep it light — "no worries if now isn't the right time." Leaves the door open without burning the relationship.</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="height:1px;background:#222"></div>
+
+          <!-- Section 5 -->
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <div style="width:32px;height:32px;border-radius:8px;background:#1a0a00;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">👥</div>
+              <h2 style="margin:0;font-size:15px;font-weight:700;color:#fff">Leads</h2>
+            </div>
+            <p style="margin:0 0 12px 0;font-size:13px;line-height:1.75;color:#aaa">Leads are the contacts a campaign will email. Each lead belongs to one campaign and progresses through the sequence independently.</p>
+            <div style="background:#111;border:1px solid #2a2a2a;border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Import via CSV:</strong> Click Import on the Leads page and paste a CSV with headers <code style="background:#1a1a1a;padding:1px 5px;border-radius:3px;font-size:12px">first_name, last_name, email, company, website, personalized_line</code>. The system deduplicates by email — re-importing the same address does nothing.</p>
+              </div>
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Status column:</strong> <em style="color:#ddd">Active</em> — in sequence, emails scheduled. <em style="color:#ddd">Replied</em> — a reply was detected, sequence stopped automatically. <em style="color:#ddd">Finished</em> — completed all steps with no reply. <em style="color:#ddd">Bounced</em> — email delivery failed. <em style="color:#ddd">Unsubscribed</em> — opted out.</p>
+              </div>
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">When a lead replies:</strong> The system detects the reply via IMAP, marks the lead as Replied, stops all further emails to them, and pushes the contact to HubSpot if the integration is configured.</p>
+              </div>
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Reset:</strong> Use the Reset button on a lead to send them back to step 1. Useful if you want to re-run a sequence after a long pause or a product update.</p>
+              </div>
+            </div>
+          </div>
+
+          <div style="height:1px;background:#222"></div>
+
+          <!-- Section 6 -->
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <div style="width:32px;height:32px;border-radius:8px;background:#14532d;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">🔄</div>
+              <h2 style="margin:0;font-size:15px;font-weight:700;color:#fff">Campaign Flow</h2>
+            </div>
+            <p style="margin:0 0 14px 0;font-size:13px;line-height:1.75;color:#aaa">Here is the full lifecycle of a lead from import to HubSpot:</p>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <div style="display:flex;align-items:center;border-radius:8px;overflow:hidden;border:1px solid #2a2a2a">
+                <div style="background:#1e293b;padding:11px 16px;font-size:11px;font-weight:700;color:#94a3b8;white-space:nowrap;width:40px;flex-shrink:0;text-align:center">1</div>
+                <div style="flex:1;padding:11px 16px;font-size:13px;color:#aaa;border-left:1px solid #2a2a2a">Add a sending account and set its status to <strong style="color:#ddd">ready</strong>.</div>
+              </div>
+              <div style="display:flex;align-items:center;border-radius:8px;overflow:hidden;border:1px solid #2a2a2a">
+                <div style="background:#1e293b;padding:11px 16px;font-size:11px;font-weight:700;color:#94a3b8;white-space:nowrap;width:40px;flex-shrink:0;text-align:center">2</div>
+                <div style="flex:1;padding:11px 16px;font-size:13px;color:#aaa;border-left:1px solid #2a2a2a">Create a campaign, assign the account, set daily limit and send schedule.</div>
+              </div>
+              <div style="display:flex;align-items:center;border-radius:8px;overflow:hidden;border:1px solid #2a2a2a">
+                <div style="background:#1e293b;padding:11px 16px;font-size:11px;font-weight:700;color:#94a3b8;white-space:nowrap;width:40px;flex-shrink:0;text-align:center">3</div>
+                <div style="flex:1;padding:11px 16px;font-size:13px;color:#aaa;border-left:1px solid #2a2a2a">Add sequence steps. Preview and test each one before going live.</div>
+              </div>
+              <div style="display:flex;align-items:center;border-radius:8px;overflow:hidden;border:1px solid #2a2a2a">
+                <div style="background:#1e293b;padding:11px 16px;font-size:11px;font-weight:700;color:#94a3b8;white-space:nowrap;width:40px;flex-shrink:0;text-align:center">4</div>
+                <div style="flex:1;padding:11px 16px;font-size:13px;color:#aaa;border-left:1px solid #2a2a2a">Import leads via CSV and assign them to the campaign.</div>
+              </div>
+              <div style="display:flex;align-items:center;border-radius:8px;overflow:hidden;border:1px solid #2a2a2a">
+                <div style="background:#1e293b;padding:11px 16px;font-size:11px;font-weight:700;color:#94a3b8;white-space:nowrap;width:40px;flex-shrink:0;text-align:center">5</div>
+                <div style="flex:1;padding:11px 16px;font-size:13px;color:#aaa;border-left:1px solid #2a2a2a">Set the campaign status to <strong style="color:#ddd">active</strong>. The scheduler picks up leads on the next run and starts sending step 1.</div>
+              </div>
+              <div style="display:flex;align-items:center;border-radius:8px;overflow:hidden;border:1px solid #2a2a2a">
+                <div style="background:#1e293b;padding:11px 16px;font-size:11px;font-weight:700;color:#94a3b8;white-space:nowrap;width:40px;flex-shrink:0;text-align:center">6</div>
+                <div style="flex:1;padding:11px 16px;font-size:13px;color:#aaa;border-left:1px solid #2a2a2a">The system checks for replies every hour via IMAP. Leads that reply are stopped and flagged automatically.</div>
+              </div>
+              <div style="display:flex;align-items:center;border-radius:8px;overflow:hidden;border:1px solid #2a2a2a">
+                <div style="background:#14532d;padding:11px 16px;font-size:11px;font-weight:700;color:#86efac;white-space:nowrap;width:40px;flex-shrink:0;text-align:center">7</div>
+                <div style="flex:1;padding:11px 16px;font-size:13px;color:#aaa;border-left:1px solid #2a2a2a">Replied leads are pushed to HubSpot as contacts. The client sees them appear in their CRM in real time.</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="height:1px;background:#222"></div>
+
+          <!-- Section 7 -->
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <div style="width:32px;height:32px;border-radius:8px;background:#0c1a2e;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">🔗</div>
+              <h2 style="margin:0;font-size:15px;font-weight:700;color:#fff">HubSpot Integration</h2>
+            </div>
+            <p style="margin:0 0 12px 0;font-size:13px;line-height:1.75;color:#aaa">When a lead replies, the system automatically creates or updates a contact in HubSpot so the client can follow up directly from their CRM.</p>
+            <div style="background:#111;border:1px solid #2a2a2a;border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">When a reply is detected:</strong> The lead's email, first name, last name, and company are sent to HubSpot via the Contacts API. If a contact with that email already exists it is updated rather than duplicated.</p>
+              </div>
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Setting up the token:</strong> Go to Settings in the sidebar. Paste a HubSpot Private App token with <em style="color:#ddd">contacts write</em> scope. The token is stored only in your browser's localStorage — it never touches the server or database.</p>
+              </div>
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Giving client access:</strong> In HubSpot go to Settings → Users and Teams → Invite User. Add the client's email and assign them the Sales or Viewer role. They will see new contacts appear as replies come in — no access to this system is needed on their end.</p>
+              </div>
+              <div style="display:flex;gap:10px">
+                <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">If no token is set:</strong> The system still sends emails and detects replies normally. HubSpot push is simply skipped. You can add the token at any time and it will apply to all future reply events.</p>
               </div>
             </div>
           </div>
