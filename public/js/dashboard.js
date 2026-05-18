@@ -72,6 +72,7 @@ async function loadWarmupDashboard() {
     if (bhContainer) bhContainer.innerHTML = bhCard;
 
     el('wd-refresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    loadDashboardScheduleStatus();
   } catch(e) {
     el('wd-stat-grid').innerHTML = '<div class="loading" style="color:#ef4444">' + e.message + '</div>';
   }

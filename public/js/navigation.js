@@ -14,6 +14,7 @@ function navigate(section) {
   const loaders = {
     'warmup-dashboard': loadWarmupDashboard,
     'warmup-progress': loadWarmupProgress,
+    'warmup-schedule': loadWarmupSchedule,
     'warmup-accounts': loadWarmupAccounts,
     'conversations': function() { loadConversations(); loadConversationTopics(); loadAutoGenerateSetting(); },
     'warmup-log': loadWarmupLog,

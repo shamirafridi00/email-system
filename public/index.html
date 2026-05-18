@@ -15,6 +15,7 @@
       <div class="nav-section-label"><span class="dot"></span>Warmup System</div>
       <a data-section="warmup-dashboard">📊 Warmup Dashboard</a>
       <a data-section="warmup-progress">📈 Warmup Progress</a>
+      <a data-section="warmup-schedule">📅 Warmup Schedule</a>
       <a data-section="warmup-accounts">🔥 Warmup Accounts</a>
       <a data-section="conversations">💬 Conversations</a>
       <a data-section="warmup-log">📋 Warmup Log</a>
@@ -68,6 +69,13 @@
           <div class="table-wrap" id="wd-recent-log"></div>
         </div>
       </div>
+      <div class="card" style="margin-top:4px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <h3 style="margin:0">Schedule Status</h3>
+          <a style="font-size:12px;color:#818cf8;cursor:pointer;text-decoration:none" onclick="navigate('warmup-schedule')">View full schedule →</a>
+        </div>
+        <div id="wd-schedule-status"><div class="loading"><span class="spinner"></span></div></div>
+      </div>
     </div>
 
     <!-- WARMUP PROGRESS -->
@@ -84,6 +92,80 @@
       </div>
       <div id="warmup-progress-cards">
         <div class="loading"><span class="spinner"></span></div>
+      </div>
+    </div>
+
+    <!-- WARMUP SCHEDULE -->
+    <div id="section-warmup-schedule" class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Warmup Schedule Planner</div>
+          <div class="text-muted" style="font-size:13px;margin-top:2px">Define your warmup ramp-up schedule. The system follows this automatically.</div>
+        </div>
+        <button class="btn btn-ghost" onclick="loadWarmupSchedule()">↻ Refresh</button>
+      </div>
+
+      <!-- Section 1: Week overview cards -->
+      <div class="stat-grid" id="ws-week-cards" style="grid-template-columns:repeat(4,1fr);margin-bottom:4px">
+        <div class="loading"><span class="spinner"></span></div>
+      </div>
+
+      <!-- Section 2: Account schedule table -->
+      <div class="card" style="margin-bottom:4px">
+        <h3>Account Schedule</h3>
+        <div class="table-wrap" id="ws-accounts-table"><div class="loading"><span class="spinner"></span></div></div>
+      </div>
+
+      <!-- Section 3: Edit schedule -->
+      <div class="card" style="margin-bottom:4px">
+        <div style="margin-bottom:16px">
+          <h3 style="margin:0 0 4px">Edit Schedule</h3>
+          <div style="font-size:12px;color:#6b7280">Customize daily email targets per week. Applied to all accounts.</div>
+        </div>
+        <table style="width:100%;border-collapse:collapse" id="ws-edit-table">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #1f2937">Week</th>
+              <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #1f2937">Label</th>
+              <th style="text-align:center;padding:8px 12px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #1f2937">Default</th>
+              <th style="text-align:center;padding:8px 12px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #1f2937">Custom Target</th>
+            </tr>
+          </thead>
+          <tbody id="ws-edit-rows"></tbody>
+        </table>
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button class="btn btn-primary" onclick="saveSchedule()">Save Schedule</button>
+          <button class="btn btn-ghost" onclick="resetScheduleDefaults()">Reset to Defaults</button>
+        </div>
+        <div id="ws-save-result" style="margin-top:10px"></div>
+      </div>
+
+      <!-- Section 4: Tips -->
+      <div class="card" style="border:1px solid #1f2937">
+        <h3 style="margin:0 0 14px">Schedule Tips</h3>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span style="font-size:16px;flex-shrink:0">1</span>
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#e5e7eb;margin-bottom:2px">Never skip days</div>
+              <div style="font-size:12px;color:#6b7280">Consistency is more important than volume. Gmail rewards regular, predictable sending patterns.</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span style="font-size:16px;flex-shrink:0">2</span>
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#e5e7eb;margin-bottom:2px">Do not rush to Week 3</div>
+              <div style="font-size:12px;color:#6b7280">Let Gmail see gradual, natural growth. Jumping to 20 emails per day too early can trigger spam filters.</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span style="font-size:16px;flex-shrink:0">3</span>
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#e5e7eb;margin-bottom:2px">Check your health score before going live</div>
+              <div style="font-size:12px;color:#6b7280">After 14 days, review the Warmup Health Score for each account. Only start real campaigns when accounts reach Good or Excellent.</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 

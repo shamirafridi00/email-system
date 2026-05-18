@@ -166,6 +166,40 @@ export function initDatabase() {
   `);
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS warmup_schedule_plans (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      plan_name TEXT DEFAULT 'Default Plan',
+      account_id INTEGER REFERENCES warmup_accounts(id),
+      week_number INTEGER NOT NULL,
+      emails_per_day INTEGER NOT NULL,
+      active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // Seed default plan for any warmup accounts that don't yet have plan rows
+  const defaultTargets = [
+    { week: 1, epd: 5 },
+    { week: 2, epd: 10 },
+    { week: 3, epd: 20 },
+    { week: 4, epd: 20 },
+  ];
+  const allWarmupAccounts = db.query<{ id: number }, []>("SELECT id FROM warmup_accounts").all();
+  const seedPlan = db.prepare(
+    "INSERT OR IGNORE INTO warmup_schedule_plans (account_id, week_number, emails_per_day) VALUES (?, ?, ?)"
+  );
+  for (const acct of allWarmupAccounts) {
+    for (const t of defaultTargets) {
+      const exists = db
+        .query<{ id: number }, [number, number]>(
+          "SELECT id FROM warmup_schedule_plans WHERE account_id = ? AND week_number = ?"
+        )
+        .get(acct.id, t.week);
+      if (!exists) seedPlan.run(acct.id, t.week, t.epd);
+    }
+  }
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS conversation_files (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       filename TEXT NOT NULL,

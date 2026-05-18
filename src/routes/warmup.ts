@@ -472,6 +472,174 @@ app.get("/conversations", (c) => {
   return c.json(rows);
 });
 
+app.get("/schedule/summary", (c) => {
+  const today = new Date().toISOString().split("T")[0];
+
+  const accounts = db
+    .query<{ id: number; email: string; warmup_started_at: string | null }, []>(
+      "SELECT id, email, warmup_started_at FROM warmup_accounts WHERE active = 1"
+    )
+    .all();
+
+  const weekCounts: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
+  let onTrack = 0;
+  let behind = 0;
+  const projections: { email: string; ready_date: string | null; week: number }[] = [];
+
+  for (const acct of accounts) {
+    let weekNum = 0;
+    let readyDate: string | null = null;
+
+    if (acct.warmup_started_at) {
+      const start = new Date(acct.warmup_started_at);
+      const daysActive = Math.floor((Date.now() - start.getTime()) / 86_400_000);
+      weekNum = Math.min(4, Math.floor(daysActive / 7) + 1);
+      const ready = new Date(start.getTime() + 14 * 86_400_000);
+      readyDate = ready.toISOString().split("T")[0];
+    }
+
+    weekCounts[weekNum] = (weekCounts[weekNum] || 0) + 1;
+
+    const plan = db
+      .query<{ emails_per_day: number }, [number, number]>(
+        "SELECT emails_per_day FROM warmup_schedule_plans WHERE account_id = ? AND week_number = ? AND active = 1"
+      )
+      .get(acct.id, Math.max(1, weekNum));
+    const target = plan?.emails_per_day ?? (weekNum <= 1 ? 5 : weekNum === 2 ? 10 : 20);
+
+    const sentToday = db
+      .query<{ count: number }, [string, string]>(
+        "SELECT COUNT(*) as count FROM warmup_log WHERE from_email = ? AND DATE(sent_at) = ?"
+      )
+      .get(acct.email, today)?.count ?? 0;
+
+    if (sentToday >= target) onTrack++;
+    else behind++;
+
+    projections.push({ email: acct.email, ready_date: readyDate, week: weekNum });
+  }
+
+  return c.json({
+    week_counts: weekCounts,
+    on_track: onTrack,
+    behind,
+    total_accounts: accounts.length,
+    projections,
+  });
+});
+
+app.get("/schedule", (c) => {
+  const today = new Date().toISOString().split("T")[0];
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  const weekStartStr = weekStart.toISOString().split("T")[0];
+
+  const accounts = db
+    .query<{ id: number; email: string; warmup_started_at: string | null }, []>(
+      "SELECT id, email, warmup_started_at FROM warmup_accounts ORDER BY id ASC"
+    )
+    .all();
+
+  const result = accounts.map((acct) => {
+    let weekNum = 0;
+    let readyDate: string | null = null;
+
+    if (acct.warmup_started_at) {
+      const start = new Date(acct.warmup_started_at);
+      const daysActive = Math.floor((Date.now() - start.getTime()) / 86_400_000);
+      weekNum = Math.min(4, Math.floor(daysActive / 7) + 1);
+      const ready = new Date(start.getTime() + 14 * 86_400_000);
+      readyDate = ready.toISOString().split("T")[0];
+    }
+
+    const plan = db
+      .query<{ emails_per_day: number }, [number, number]>(
+        "SELECT emails_per_day FROM warmup_schedule_plans WHERE account_id = ? AND week_number = ? AND active = 1"
+      )
+      .get(acct.id, Math.max(1, weekNum));
+    const dailyTarget = plan?.emails_per_day ?? (weekNum <= 1 ? 5 : weekNum === 2 ? 10 : 20);
+
+    const sentToday = db
+      .query<{ count: number }, [string, string]>(
+        "SELECT COUNT(*) as count FROM warmup_log WHERE from_email = ? AND DATE(sent_at) = ?"
+      )
+      .get(acct.email, today)?.count ?? 0;
+
+    const sentThisWeek = db
+      .query<{ count: number }, [string, string]>(
+        "SELECT COUNT(*) as count FROM warmup_log WHERE from_email = ? AND DATE(sent_at) >= ?"
+      )
+      .get(acct.email, weekStartStr)?.count ?? 0;
+
+    // Ensure plan rows exist for this account (seed if new account)
+    for (const wk of [1, 2, 3, 4]) {
+      const exists = db
+        .query<{ id: number }, [number, number]>(
+          "SELECT id FROM warmup_schedule_plans WHERE account_id = ? AND week_number = ?"
+        )
+        .get(acct.id, wk);
+      if (!exists) {
+        const defaults = [5, 10, 20, 20];
+        db.run(
+          "INSERT INTO warmup_schedule_plans (account_id, week_number, emails_per_day) VALUES (?, ?, ?)",
+          [acct.id, wk, defaults[wk - 1]]
+        );
+      }
+    }
+
+    const allWeekPlans = db
+      .query<{ week_number: number; emails_per_day: number }, [number]>(
+        "SELECT week_number, emails_per_day FROM warmup_schedule_plans WHERE account_id = ? AND active = 1 ORDER BY week_number ASC"
+      )
+      .all(acct.id);
+
+    return {
+      id: acct.id,
+      email: acct.email,
+      warmup_started_at: acct.warmup_started_at,
+      current_week: weekNum,
+      daily_target: dailyTarget,
+      sent_today: sentToday,
+      sent_this_week: sentThisWeek,
+      on_track: sentToday >= dailyTarget,
+      projected_ready_date: readyDate,
+      week_plans: allWeekPlans,
+    };
+  });
+
+  return c.json(result);
+});
+
+app.post("/schedule", async (c) => {
+  const body = await c.req.json<{ entries: { account_id: number; week_number: number; emails_per_day: number }[] }>();
+
+  if (!Array.isArray(body.entries) || body.entries.length === 0) {
+    return c.json({ error: "entries array is required" }, 400);
+  }
+
+  for (const entry of body.entries) {
+    const exists = db
+      .query<{ id: number }, [number, number]>(
+        "SELECT id FROM warmup_schedule_plans WHERE account_id = ? AND week_number = ?"
+      )
+      .get(entry.account_id, entry.week_number);
+
+    if (exists) {
+      db.run(
+        "UPDATE warmup_schedule_plans SET emails_per_day = ? WHERE account_id = ? AND week_number = ?",
+        [entry.emails_per_day, entry.account_id, entry.week_number]
+      );
+    } else {
+      db.run(
+        "INSERT INTO warmup_schedule_plans (account_id, week_number, emails_per_day) VALUES (?, ?, ?)",
+        [entry.account_id, entry.week_number, entry.emails_per_day]
+      );
+    }
+  }
+
+  return c.json({ success: true, updated: body.entries.length });
+});
+
 app.get("/settings/auto-generate", (c) => {
   const row = db
     .query<{ value: string }, []>(

@@ -9,6 +9,7 @@ interface WarmupAccount {
   app_password: string;
   daily_volume: number;
   active: number;
+  warmup_started_at?: string | null;
 }
 
 interface ConversationEmail {
@@ -164,10 +165,52 @@ export async function runWarmupAll(accountSubset?: WarmupAccount[]): Promise<voi
     return;
   }
 
+  const today = new Date().toISOString().split("T")[0];
+
   for (const receiver of accounts) {
+    // Check if receiver has hit their daily schedule target — skip if so
+    const receiverWeek = receiver.warmup_started_at
+      ? Math.min(4, Math.floor((Date.now() - new Date(receiver.warmup_started_at).getTime()) / (7 * 86_400_000)) + 1)
+      : 1;
+    const receiverPlan = db
+      .query<{ emails_per_day: number }, [number, number]>(
+        "SELECT emails_per_day FROM warmup_schedule_plans WHERE account_id = ? AND week_number = ? AND active = 1"
+      )
+      .get(receiver.id, receiverWeek);
+    const receiverTarget = receiverPlan?.emails_per_day ?? (receiverWeek <= 1 ? 5 : receiverWeek === 2 ? 10 : 20);
+    const receiverSentToday = db
+      .query<{ count: number }, [string, string]>(
+        "SELECT COUNT(*) as count FROM warmup_log WHERE from_email = ? AND DATE(sent_at) = ?"
+      )
+      .get(receiver.email, today)?.count ?? 0;
+    if (receiverSentToday >= receiverTarget) {
+      console.log(`[warmup] ${receiver.email} has hit daily target (${receiverSentToday}/${receiverTarget}) — skipping`);
+      continue;
+    }
+
     // Pick a random sender that is not the receiver
     const pool = accounts.filter((a) => a.id !== receiver.id);
     const sender = randomItem(pool);
+
+    // Check sender daily target too
+    const senderWeek = sender.warmup_started_at
+      ? Math.min(4, Math.floor((Date.now() - new Date(sender.warmup_started_at).getTime()) / (7 * 86_400_000)) + 1)
+      : 1;
+    const senderPlan = db
+      .query<{ emails_per_day: number }, [number, number]>(
+        "SELECT emails_per_day FROM warmup_schedule_plans WHERE account_id = ? AND week_number = ? AND active = 1"
+      )
+      .get(sender.id, senderWeek);
+    const senderTarget = senderPlan?.emails_per_day ?? (senderWeek <= 1 ? 5 : senderWeek === 2 ? 10 : 20);
+    const senderSentToday = db
+      .query<{ count: number }, [string, string]>(
+        "SELECT COUNT(*) as count FROM warmup_log WHERE from_email = ? AND DATE(sent_at) = ?"
+      )
+      .get(sender.email, today)?.count ?? 0;
+    if (senderSentToday >= senderTarget) {
+      console.log(`[warmup] ${sender.email} has hit daily target (${senderSentToday}/${senderTarget}) — skipping as sender`);
+      continue;
+    }
 
     console.log(
       `Attempting warmup: ${sender.email} → ${receiver.email} | app_password length: ${sender.app_password.length} chars`
@@ -380,30 +423,77 @@ export async function generateDailyConversations(): Promise<{ generated: number;
   }
 
   const accounts = db
-    .query<WarmupAccount, []>("SELECT * FROM warmup_accounts WHERE active = 1")
+    .query<WarmupAccount & { warmup_started_at: string | null }, []>(
+      "SELECT * FROM warmup_accounts WHERE active = 1"
+    )
     .all();
 
   if (accounts.length < 2) {
     return { generated: 0, skipped: "fewer than 2 active accounts" };
   }
 
-  // Generate 2–3 conversations randomly each day
-  const count = 2 + Math.floor(Math.random() * 2);
   const CONVERSATIONS_DIR_PATH = new URL("../../conversations", import.meta.url).pathname;
-
+  const today = new Date().toISOString().split("T")[0];
   let generated = 0;
-  for (let i = 0; i < count; i++) {
-    const row = db
-      .query<{ topic: string }, []>(
-        "SELECT topic FROM warmup_conversations_library ORDER BY RANDOM() LIMIT 1"
+
+  // For each account, determine how many more conversations to generate based on schedule plan
+  const accountTargets: { account: typeof accounts[0]; remaining: number }[] = [];
+  for (const acct of accounts) {
+    const weekNum = acct.warmup_started_at
+      ? Math.min(4, Math.floor((Date.now() - new Date(acct.warmup_started_at).getTime()) / (7 * 86_400_000)) + 1)
+      : 1;
+    const plan = db
+      .query<{ emails_per_day: number }, [number, number]>(
+        "SELECT emails_per_day FROM warmup_schedule_plans WHERE account_id = ? AND week_number = ? AND active = 1"
       )
-      .get();
-    const topic = row?.topic ?? "project kickoff";
+      .get(acct.id, weekNum);
+    const target = plan?.emails_per_day ?? (weekNum <= 1 ? 5 : weekNum === 2 ? 10 : 20);
+    const sentToday = db
+      .query<{ count: number }, [string, string]>(
+        "SELECT COUNT(*) as count FROM warmup_log WHERE from_email = ? AND DATE(sent_at) = ?"
+      )
+      .get(acct.email, today)?.count ?? 0;
+    const remaining = Math.max(0, target - sentToday);
+    if (remaining > 0) accountTargets.push({ account: acct, remaining });
+  }
 
+  // Generate conversations to fill gaps — pair accounts that still need volume
+  const pairs: { sender: typeof accounts[0]; receiver: typeof accounts[0]; topic: string }[] = [];
+  for (const { account: sender, remaining } of accountTargets) {
+    const possibleReceivers = accounts.filter((a) => a.id !== sender.id);
+    if (possibleReceivers.length === 0) continue;
+    const convCount = Math.ceil(remaining / 2); // each conversation covers ~2 sends (send + reply)
+    for (let i = 0; i < Math.min(convCount, 3); i++) {
+      const receiver = possibleReceivers[Math.floor(Math.random() * possibleReceivers.length)];
+      const row = db
+        .query<{ topic: string }, []>(
+          "SELECT topic FROM warmup_conversations_library ORDER BY RANDOM() LIMIT 1"
+        )
+        .get();
+      pairs.push({ sender, receiver, topic: row?.topic ?? "project kickoff" });
+    }
+  }
+
+  // Deduplicate and cap at 5 total
+  const seen = new Set<string>();
+  const uniquePairs = pairs.filter((p) => {
+    const key = `${p.sender.id}:${p.receiver.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 5);
+
+  if (uniquePairs.length === 0) {
+    // Fallback: generate 2 random conversations if no targets computed
     const shuffled = accounts.slice().sort(() => Math.random() - 0.5);
-    const sender = shuffled[0];
-    const receiver = shuffled.find((a) => a.id !== sender.id)!;
+    for (let i = 0; i < Math.min(2, Math.floor(accounts.length / 2)); i++) {
+      const row = db.query<{ topic: string }, []>("SELECT topic FROM warmup_conversations_library ORDER BY RANDOM() LIMIT 1").get();
+      uniquePairs.push({ sender: shuffled[i * 2], receiver: shuffled[i * 2 + 1], topic: row?.topic ?? "project kickoff" });
+    }
+  }
 
+  for (let i = 0; i < uniquePairs.length; i++) {
+    const { sender, receiver, topic } = uniquePairs[i];
     const conv = generateConversation(sender.email, receiver.email, topic);
     const filename = `auto_${topic.replace(/\s+/g, "_")}_${Date.now()}_${i}.json`;
     const filePath = `${CONVERSATIONS_DIR_PATH}/${filename}`;
@@ -421,7 +511,7 @@ export async function generateDailyConversations(): Promise<{ generated: number;
       console.error(`[warmup] generateDailyConversations: failed to write ${filename}:`, err);
     }
 
-    if (i < count - 1) await new Promise((r) => setTimeout(r, 200));
+    if (i < uniquePairs.length - 1) await new Promise((r) => setTimeout(r, 200));
   }
 
   console.log(`[warmup] generateDailyConversations: generated ${generated} conversation(s)`);

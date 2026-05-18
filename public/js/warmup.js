@@ -646,3 +646,219 @@ async function uploadConversation() {
     toast(e.message, 'error');
   }
 }
+
+// ─── Warmup Schedule Planner ──────────────────────────────────────────────────
+var scheduleData = [];
+
+var WEEK_LABELS = {
+  1: 'Foundation',
+  2: 'Building',
+  3: 'Full Volume',
+  4: 'Maintenance',
+};
+var WEEK_DEFAULTS = { 1: 5, 2: 10, 3: 20, 4: 20 };
+var WEEK_COLORS = {
+  1: { color: '#f59e0b', bg: '#1c1917', border: '#78350f' },
+  2: { color: '#818cf8', bg: '#1e1b4b', border: '#3730a3' },
+  3: { color: '#22c55e', bg: '#052e16', border: '#166534' },
+  4: { color: '#4ade80', bg: '#071a0f', border: '#166534' },
+};
+
+async function loadWarmupSchedule() {
+  var weekCardsEl = el('ws-week-cards');
+  var tableEl = el('ws-accounts-table');
+  var editRowsEl = el('ws-edit-rows');
+  if (weekCardsEl) weekCardsEl.innerHTML = '<div class="loading"><span class="spinner"></span></div>';
+  if (tableEl) tableEl.innerHTML = '<div class="loading"><span class="spinner"></span></div>';
+
+  try {
+    var data = await api('/warmup/schedule');
+    var summary = await api('/warmup/schedule/summary');
+    scheduleData = data;
+
+    // ── Week overview cards ───────────────────────────────────────────────────
+    if (weekCardsEl) {
+      weekCardsEl.innerHTML = [1, 2, 3, 4].map(function(wk) {
+        var wc = WEEK_COLORS[wk];
+        var count = summary.week_counts[wk] || 0;
+        var defaultTarget = WEEK_DEFAULTS[wk];
+        // Find the most common custom target for this week across accounts
+        var targets = data.map(function(a) {
+          var plan = a.week_plans && a.week_plans.find(function(p) { return p.week_number === wk; });
+          return plan ? plan.emails_per_day : defaultTarget;
+        });
+        var customTarget = targets.length ? targets[0] : defaultTarget;
+        var isActive = data.some(function(a) { return a.current_week === wk; });
+        return '<div class="stat-card" style="' + (isActive ? 'border:2px solid #6366f1;background:#1e1b4b' : '') + '">' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
+            '<span style="font-size:11px;font-weight:700;color:' + wc.color + ';text-transform:uppercase;letter-spacing:.06em">Week ' + wk + '</span>' +
+            (count > 0
+              ? '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:' + wc.bg + ';color:' + wc.color + ';border:1px solid ' + wc.border + '">' + count + ' account' + (count === 1 ? '' : 's') + '</span>'
+              : '<span style="font-size:11px;color:#4b5563">—</span>') +
+          '</div>' +
+          '<div style="font-size:28px;font-weight:800;color:#e5e7eb;line-height:1">' + customTarget + '</div>' +
+          '<div style="font-size:12px;color:#6b7280;margin-top:4px">emails / day</div>' +
+          '<div style="font-size:11px;color:#4b5563;margin-top:6px">' + WEEK_LABELS[wk] + ' · default ' + defaultTarget + '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    // ── Account schedule table ────────────────────────────────────────────────
+    if (tableEl) {
+      tableEl.innerHTML = data.length
+        ? '<table><thead><tr>' +
+            '<th>Account</th>' +
+            '<th style="text-align:center">Current Week</th>' +
+            '<th style="text-align:center">Target / Day</th>' +
+            '<th style="text-align:center">Sent Today</th>' +
+            '<th style="text-align:center">Sent This Week</th>' +
+            '<th style="text-align:center">On Track</th>' +
+            '<th>Projected Ready</th>' +
+          '</tr></thead><tbody>' +
+          data.map(function(a) {
+            var wk = a.current_week || 0;
+            var wc = wk > 0 ? WEEK_COLORS[wk] : { color: '#6b7280', bg: '#1f2937', border: '#374151' };
+            var weekBadge = wk > 0
+              ? '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;background:' + wc.bg + ';color:' + wc.color + ';border:1px solid ' + wc.border + '">Week ' + wk + '</span>'
+              : '<span style="font-size:11px;color:#6b7280">Not started</span>';
+            var onTrackBadge = a.on_track
+              ? '<span style="color:#22c55e;font-size:16px" title="On track">✓</span>'
+              : '<span style="color:#ef4444;font-size:14px" title="Behind target">✗</span>';
+            var readyDate = a.projected_ready_date
+              ? new Date(a.projected_ready_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+              : '—';
+            return '<tr>' +
+              '<td style="font-family:monospace;font-size:12px">' + a.email + '</td>' +
+              '<td style="text-align:center">' + weekBadge + '</td>' +
+              '<td style="text-align:center;font-weight:700;color:#e5e7eb">' + a.daily_target + '</td>' +
+              '<td style="text-align:center;color:' + (a.sent_today >= a.daily_target ? '#22c55e' : '#e5e7eb') + ';font-weight:600">' + a.sent_today + '</td>' +
+              '<td style="text-align:center;color:#9ca3af">' + a.sent_this_week + '</td>' +
+              '<td style="text-align:center">' + onTrackBadge + '</td>' +
+              '<td style="font-size:12px;color:#9ca3af;white-space:nowrap">' + readyDate + '</td>' +
+              '</tr>';
+          }).join('') +
+          '</tbody></table>'
+        : '<div class="no-data">No warmup accounts found</div>';
+    }
+
+    // ── Edit schedule grid ────────────────────────────────────────────────────
+    if (editRowsEl) {
+      editRowsEl.innerHTML = [1, 2, 3, 4].map(function(wk) {
+        // Use first account's plan for this week as the representative target
+        var repPlan = data.length && data[0].week_plans
+          ? data[0].week_plans.find(function(p) { return p.week_number === wk; })
+          : null;
+        var currentVal = repPlan ? repPlan.emails_per_day : WEEK_DEFAULTS[wk];
+        return '<tr>' +
+          '<td style="padding:10px 12px;font-weight:700;color:#e5e7eb">Week ' + wk + '</td>' +
+          '<td style="padding:10px 12px;color:#9ca3af">' + WEEK_LABELS[wk] + '</td>' +
+          '<td style="padding:10px 12px;text-align:center;color:#6b7280">' + WEEK_DEFAULTS[wk] + '</td>' +
+          '<td style="padding:10px 12px;text-align:center">' +
+            '<input id="ws-week-' + wk + '-input" type="number" min="1" max="50" value="' + currentVal + '" ' +
+              'style="width:70px;text-align:center;padding:6px 8px;background:#1a1a1a;border:1px solid #333;border-radius:6px;color:#e5e7eb;font-size:14px;font-weight:700">' +
+          '</td>' +
+        '</tr>';
+      }).join('');
+    }
+
+  } catch(e) {
+    if (weekCardsEl) weekCardsEl.innerHTML = '<div class="no-data" style="color:#ef4444">' + e.message + '</div>';
+    if (tableEl) tableEl.innerHTML = '<div class="no-data" style="color:#ef4444">' + e.message + '</div>';
+  }
+}
+
+async function saveSchedule() {
+  var resultEl = el('ws-save-result');
+  if (resultEl) resultEl.innerHTML = '';
+
+  var entries = [];
+  for (var wk = 1; wk <= 4; wk++) {
+    var inp = el('ws-week-' + wk + '-input');
+    if (!inp) continue;
+    var val = parseInt(inp.value);
+    if (isNaN(val) || val < 1) { toast('Week ' + wk + ' target must be at least 1', 'error'); return; }
+    // Apply to all accounts
+    for (var i = 0; i < scheduleData.length; i++) {
+      entries.push({ account_id: scheduleData[i].id, week_number: wk, emails_per_day: val });
+    }
+  }
+
+  if (entries.length === 0) { toast('No accounts to save for', 'error'); return; }
+
+  try {
+    await api('/warmup/schedule', { method: 'POST', body: JSON.stringify({ entries: entries }) });
+    toast('Schedule saved for all accounts', 'success');
+    if (resultEl) resultEl.innerHTML = '<div style="color:#22c55e;font-size:13px">✓ Schedule saved</div>';
+    loadWarmupSchedule();
+  } catch(e) {
+    toast(e.message, 'error');
+    if (resultEl) resultEl.innerHTML = '<div style="color:#ef4444;font-size:13px">' + e.message + '</div>';
+  }
+}
+
+async function resetScheduleDefaults() {
+  [1, 2, 3, 4].forEach(function(wk) {
+    var inp = el('ws-week-' + wk + '-input');
+    if (inp) inp.value = WEEK_DEFAULTS[wk];
+  });
+
+  var entries = [];
+  for (var wk = 1; wk <= 4; wk++) {
+    for (var i = 0; i < scheduleData.length; i++) {
+      entries.push({ account_id: scheduleData[i].id, week_number: wk, emails_per_day: WEEK_DEFAULTS[wk] });
+    }
+  }
+
+  if (entries.length === 0) {
+    toast('Inputs reset to defaults (no accounts to save)', 'success');
+    return;
+  }
+
+  try {
+    await api('/warmup/schedule', { method: 'POST', body: JSON.stringify({ entries: entries }) });
+    toast('Schedule reset to defaults', 'success');
+    loadWarmupSchedule();
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+}
+
+// ─── Dashboard: Schedule Status card ─────────────────────────────────────────
+async function loadDashboardScheduleStatus() {
+  var container = el('wd-schedule-status');
+  if (!container) return;
+  try {
+    var data = await api('/warmup/schedule');
+    if (!data.length) {
+      container.innerHTML = '<div class="no-data" style="font-size:13px">No warmup accounts yet</div>';
+      return;
+    }
+    container.innerHTML = '<table style="width:100%"><thead><tr>' +
+      '<th>Account</th>' +
+      '<th style="text-align:center">Week</th>' +
+      '<th style="text-align:center">Target/Day</th>' +
+      '<th style="text-align:center">Sent Today</th>' +
+      '<th style="text-align:center">Status</th>' +
+    '</tr></thead><tbody>' +
+    data.map(function(a) {
+      var wk = a.current_week || 0;
+      var wc = wk > 0 ? WEEK_COLORS[wk] : { color: '#6b7280', bg: '#1f2937', border: '#374151' };
+      var weekBadge = wk > 0
+        ? '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:' + wc.bg + ';color:' + wc.color + ';border:1px solid ' + wc.border + '">Wk ' + wk + '</span>'
+        : '<span style="font-size:11px;color:#6b7280">—</span>';
+      var statusBadge = a.on_track
+        ? '<span style="font-size:11px;font-weight:600;color:#4ade80;background:#052e16;border:1px solid #166534;border-radius:999px;padding:2px 8px">✓ On track</span>'
+        : '<span style="font-size:11px;font-weight:600;color:#f59e0b;background:#292010;border:1px solid #78350f;border-radius:999px;padding:2px 8px">Behind</span>';
+      return '<tr>' +
+        '<td style="font-family:monospace;font-size:12px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + a.email + '</td>' +
+        '<td style="text-align:center">' + weekBadge + '</td>' +
+        '<td style="text-align:center;font-weight:700;color:#e5e7eb">' + a.daily_target + '</td>' +
+        '<td style="text-align:center;color:' + (a.sent_today >= a.daily_target ? '#22c55e' : '#9ca3af') + ';font-weight:600">' + a.sent_today + '</td>' +
+        '<td style="text-align:center">' + statusBadge + '</td>' +
+        '</tr>';
+    }).join('') +
+    '</tbody></table>';
+  } catch(e) {
+    if (container) container.innerHTML = '<div class="no-data" style="color:#ef4444;font-size:13px">' + e.message + '</div>';
+  }
+}
