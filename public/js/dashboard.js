@@ -50,6 +50,27 @@ async function loadWarmupDashboard() {
         '</tbody></table>'
       : '<div class="no-data">No warmup emails yet</div>';
 
+    // Business hours status card
+    var inWindow = isUSBusinessHoursNow();
+    var bhCard = '<div class="card" style="margin-top:4px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">' +
+      '<div style="display:flex;align-items:center;gap:14px">' +
+        '<div>' +
+          '<div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">US Eastern Time</div>' +
+          '<div style="font-size:15px;font-weight:700;color:#e5e7eb">' + formatUSEastern() + '</div>' +
+        '</div>' +
+        '<div style="width:1px;height:32px;background:#1f2937"></div>' +
+        '<div>' +
+          '<div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Sending Window</div>' +
+          (inWindow
+            ? '<span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:#4ade80"><span style="width:7px;height:7px;border-radius:50%;background:#4ade80;animation:pulse 1.5s infinite"></span>Active Window</span>'
+            : '<span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:#6b7280"><span style="width:7px;height:7px;border-radius:50%;background:#6b7280"></span>Outside Window</span>') +
+        '</div>' +
+      '</div>' +
+      '<div style="font-size:11px;color:#6b7280">Mon–Fri · 8am–6pm ET · randomized sends</div>' +
+    '</div>';
+    var bhContainer = document.getElementById('wd-biz-hours');
+    if (bhContainer) bhContainer.innerHTML = bhCard;
+
     el('wd-refresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
   } catch(e) {
     el('wd-stat-grid').innerHTML = '<div class="loading" style="color:#ef4444">' + e.message + '</div>';

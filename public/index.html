@@ -57,6 +57,7 @@
       <div class="stat-grid" id="wd-stat-grid" style="grid-template-columns:repeat(4,1fr)">
         <div class="loading"><span class="spinner"></span></div>
       </div>
+      <div id="wd-biz-hours"></div>
       <div class="two-col" style="margin-top:4px">
         <div class="card">
           <h3>Emails per Day (Last 7 Days)</h3>
@@ -113,9 +114,12 @@
     <!-- WARMUP ACCOUNTS -->
     <div id="section-warmup-accounts" class="section">
       <div class="section-header">
-        <div style="display:flex;align-items:center;gap:10px">
-          <div class="section-title">Warmup Accounts</div>
-          <span id="warmup-status-badge"></span>
+        <div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="section-title">Warmup Accounts</div>
+            <span id="warmup-status-badge"></span>
+          </div>
+          <div style="font-size:12px;color:#6b7280;margin-top:3px">Warmup emails send randomly during US Eastern business hours · Mon–Fri 8am–6pm · natural irregular patterns</div>
         </div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-success" onclick="startWarmup()">▶ Start Warmup</button>
@@ -151,9 +155,54 @@
       <div class="section-header">
         <div class="section-title">Conversations</div>
       </div>
-      <div class="card" style="max-width:640px">
+
+      <!-- Section 1: Auto Generate -->
+      <div class="card" style="margin-bottom:4px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+          <div>
+            <h3 style="margin:0 0 4px">Auto Generate</h3>
+            <div style="font-size:12px;color:#6b7280">Generate realistic email conversations instantly from our built-in library</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:12px;color:#6b7280">Daily Auto-Generate</span>
+            <button id="auto-gen-toggle" onclick="toggleAutoGenerate()" style="position:relative;width:44px;height:24px;border-radius:999px;border:none;cursor:pointer;transition:background .2s;background:#374151">
+              <span id="auto-gen-knob" style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .2s"></span>
+            </button>
+            <span id="auto-gen-label" style="font-size:12px;color:#6b7280">Off</span>
+          </div>
+        </div>
+        <div class="form-row" style="margin-bottom:14px">
+          <div class="form-group">
+            <label>Topic</label>
+            <select id="conv-topic-select" style="width:100%">
+              <option value="">Random topic</option>
+            </select>
+          </div>
+          <div class="form-group" style="max-width:140px">
+            <label>Bulk Count</label>
+            <select id="conv-bulk-count">
+              <option value="1">1 conversation</option>
+              <option value="2" selected>2 conversations</option>
+              <option value="3">3 conversations</option>
+              <option value="4">4 conversations</option>
+              <option value="5">5 conversations</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="generateConversation()"><span id="gen-spinner"></span> Generate</button>
+          <button class="btn btn-ghost" onclick="generateBulkConversations()"><span id="gen-bulk-spinner"></span> Generate Bulk</button>
+        </div>
+        <div id="conv-gen-result" style="margin-top:14px"></div>
+      </div>
+
+      <!-- Section 2: Manual Upload -->
+      <div class="card" style="margin-bottom:4px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-          <h3 style="margin:0">Upload Conversation JSON</h3>
+          <div>
+            <h3 style="margin:0 0 4px">Manual Upload</h3>
+            <div style="font-size:12px;color:#6b7280">Paste a custom conversation JSON to schedule directly</div>
+          </div>
           <button class="btn btn-ghost btn-sm" onclick="toggleChatGPTPrompt()">Get ChatGPT Prompt</button>
         </div>
         <div id="chatgpt-prompt-panel" style="display:none;margin-bottom:20px;background:#111;border:1px solid #2a2a2a;border-radius:8px;padding:16px">
@@ -182,14 +231,18 @@ Replace sender@gmail.com and receiver@gmail.com with two different email address
             <button class="btn btn-primary btn-sm" onclick="copyConvPrompt()">Copy Prompt</button>
           </div>
         </div>
-        <p style="font-size:13px;color:#666;margin-bottom:16px;line-height:1.6">Paste a ChatGPT-generated conversation JSON. Each email in the array will be scheduled and sent automatically at the specified delay.</p>
         <div class="form-group" style="margin-bottom:10px"><label>Filename</label><input id="conv-filename" placeholder="conversation_1.json"></div>
-        <div class="form-group" style="margin-bottom:14px"><label>JSON Content</label><textarea id="conv-content" rows="10" placeholder='{"emails":[{"from":"a@gmail.com","to":"b@gmail.com","subject":"Hey","body":"Hi there","send_after_minutes":5}]}'></textarea></div>
+        <div class="form-group" style="margin-bottom:14px"><label>JSON Content</label><textarea id="conv-content" rows="8" placeholder='{"emails":[{"from":"a@gmail.com","to":"b@gmail.com","subject":"Hey","body":"Hi there","send_after_minutes":5}]}'></textarea></div>
         <button class="btn btn-primary" onclick="uploadConversation()">Upload & Schedule</button>
         <div id="conv-result" class="mt-16"></div>
       </div>
-      <div class="card" style="margin-top:4px">
-        <h3>Conversation History</h3>
+
+      <!-- Section 3: History -->
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <h3 style="margin:0">Conversation History</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadConversations()">↻ Refresh</button>
+        </div>
         <div class="table-wrap" id="conv-history-table"><div class="loading"><span class="spinner"></span></div></div>
       </div>
     </div>

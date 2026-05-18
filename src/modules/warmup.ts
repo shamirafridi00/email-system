@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import { readFileSync } from "fs";
 import { db } from "../database";
+import { randomBusinessDelay, isUSBusinessHours, getNextUSBusinessStart } from "../utils/timezone";
 
 interface WarmupAccount {
   id: number;
@@ -84,7 +85,24 @@ export function processConversationFile(filePath: string): void {
 
   const conversationId = parsed.conversation_id || "auto";
 
+  // If outside US business hours, offset all sends so the first email starts
+  // at the next business-day 8am Eastern + a random 0–60 min warm-start offset.
+  let baseOffsetMs = 0;
+  if (!isUSBusinessHours()) {
+    const nextStart = getNextUSBusinessStart();
+    const warmStartJitter = Math.floor(Math.random() * 60_000 * 60); // 0–60 min
+    baseOffsetMs = nextStart.getTime() - Date.now() + warmStartJitter;
+    console.log(
+      `[warmup] outside business hours — conversation "${conversationId}" starts in ${Math.round(baseOffsetMs / 60_000)}m`
+    );
+  }
+
   for (const email of parsed.emails) {
+    // Apply ±20% jitter to each scheduled delay
+    const nominalMs = email.send_after_minutes * 60_000;
+    const jitterFactor = 0.8 + Math.random() * 0.4; // 0.8–1.2
+    const scheduledMs = baseOffsetMs + Math.round(nominalMs * jitterFactor);
+
     setTimeout(
       async () => {
         try {
@@ -95,16 +113,11 @@ export function processConversationFile(filePath: string): void {
             .get(email.from);
 
           if (!fromAccount) {
-            console.error(
-              `Warmup account not found or inactive: ${email.from}`
-            );
+            console.error(`Warmup account not found or inactive: ${email.from}`);
             return;
           }
 
-          const transport = buildTransport(
-            fromAccount.email,
-            fromAccount.app_password
-          );
+          const transport = buildTransport(fromAccount.email, fromAccount.app_password);
 
           await transport.sendMail({
             from: fromAccount.email,
@@ -118,22 +131,17 @@ export function processConversationFile(filePath: string): void {
             [fromAccount.email, email.to, email.subject, conversationId]
           );
 
-          console.log(
-            `Warmup sent: ${fromAccount.email} → ${email.to} | ${email.subject}`
-          );
+          console.log(`Warmup sent: ${fromAccount.email} → ${email.to} | ${email.subject}`);
         } catch (err) {
-          console.error(
-            `Warmup send failed (${email.from} → ${email.to}):`,
-            err
-          );
+          console.error(`Warmup send failed (${email.from} → ${email.to}):`, err);
         }
       },
-      email.send_after_minutes * 60_000
+      scheduledMs
     );
   }
 }
 
-export async function runWarmupAll(): Promise<void> {
+export async function runWarmupAll(accountSubset?: WarmupAccount[]): Promise<void> {
   const setting = db
     .query<{ value: string }, []>(
       "SELECT value FROM system_settings WHERE key = 'warmup_running'"
@@ -145,7 +153,7 @@ export async function runWarmupAll(): Promise<void> {
     return;
   }
 
-  const accounts = db
+  const accounts = accountSubset ?? db
     .query<WarmupAccount, []>(
       "SELECT * FROM warmup_accounts WHERE active = 1"
     )
@@ -221,8 +229,9 @@ export async function runWarmupAll(): Promise<void> {
 
       console.log(`Warmup sent: ${sender.email} → ${receiver.email} | ${subject}`);
 
-      // Auto-reply: receiver → sender after a random 5–30 min delay
-      await randomDelay(300_000, 1_800_000);
+      // Auto-reply: receiver → sender with weighted human-like delay
+      const replyDelayMs = randomBusinessDelay();
+      await new Promise((r) => setTimeout(r, replyDelayMs));
 
       const replyBody = randomItem(REPLY_BODIES);
       const replySubject = `Re: ${subject}`;
@@ -293,6 +302,130 @@ export async function runWarmupAll(): Promise<void> {
       );
     }
   }
+}
+
+export interface GeneratedConversation {
+  conversation_id: string;
+  emails: ConversationEmail[];
+}
+
+export function generateConversation(
+  senderEmail: string,
+  receiverEmail: string,
+  topic: string
+): GeneratedConversation {
+  const convId = `auto_${topic.replace(/\s+/g, "_")}_${Date.now()}`;
+
+  // Pick a random entry from the library for this topic, fallback to any random
+  let libEntry = db
+    .query<{ subject: string; body_sender: string; body_receiver: string }, [string]>(
+      "SELECT subject, body_sender, body_receiver FROM warmup_conversations_library WHERE topic = ? ORDER BY RANDOM() LIMIT 1"
+    )
+    .get(topic);
+
+  if (!libEntry) {
+    libEntry = db
+      .query<{ subject: string; body_sender: string; body_receiver: string }, []>(
+        "SELECT subject, body_sender, body_receiver FROM warmup_conversations_library ORDER BY RANDOM() LIMIT 1"
+      )
+      .get() ?? { subject: "Following up", body_sender: randomItem(BODIES), body_receiver: randomItem(REPLY_BODIES) };
+  }
+
+  // Randomly choose 4, 5, or 6 emails
+  const emailCount = 4 + Math.floor(Math.random() * 3); // 4–6
+  const schedules: number[][] = [
+    [0, 45, 120, 240],
+    [0, 30, 90, 180, 300],
+    [0, 25, 70, 140, 220, 320],
+  ];
+  const schedule = schedules[emailCount - 4];
+
+  const emails: ConversationEmail[] = [];
+  for (let i = 0; i < emailCount; i++) {
+    const fromEmail = i % 2 === 0 ? senderEmail : receiverEmail;
+    const toEmail = i % 2 === 0 ? receiverEmail : senderEmail;
+
+    const subject = i === 0 ? libEntry.subject : `Re: ${libEntry.subject}`;
+
+    let body: string;
+    if (i === 0) {
+      body = libEntry.body_sender;
+    } else if (i === 1) {
+      body = libEntry.body_receiver;
+    } else {
+      body = i % 2 === 0 ? randomItem(BODIES) : randomItem(REPLY_BODIES);
+    }
+
+    emails.push({
+      from: fromEmail,
+      to: toEmail,
+      subject,
+      body,
+      send_after_minutes: schedule[i],
+    });
+  }
+
+  return { conversation_id: convId, emails };
+}
+
+export async function generateDailyConversations(): Promise<{ generated: number; skipped: string }> {
+  const setting = db
+    .query<{ value: string }, []>(
+      "SELECT value FROM system_settings WHERE key = 'auto_generate_conversations'"
+    )
+    .get();
+
+  if (setting?.value !== "1") {
+    return { generated: 0, skipped: "auto-generate is disabled" };
+  }
+
+  const accounts = db
+    .query<WarmupAccount, []>("SELECT * FROM warmup_accounts WHERE active = 1")
+    .all();
+
+  if (accounts.length < 2) {
+    return { generated: 0, skipped: "fewer than 2 active accounts" };
+  }
+
+  // Generate 2–3 conversations randomly each day
+  const count = 2 + Math.floor(Math.random() * 2);
+  const CONVERSATIONS_DIR_PATH = new URL("../../conversations", import.meta.url).pathname;
+
+  let generated = 0;
+  for (let i = 0; i < count; i++) {
+    const row = db
+      .query<{ topic: string }, []>(
+        "SELECT topic FROM warmup_conversations_library ORDER BY RANDOM() LIMIT 1"
+      )
+      .get();
+    const topic = row?.topic ?? "project kickoff";
+
+    const shuffled = accounts.slice().sort(() => Math.random() - 0.5);
+    const sender = shuffled[0];
+    const receiver = shuffled.find((a) => a.id !== sender.id)!;
+
+    const conv = generateConversation(sender.email, receiver.email, topic);
+    const filename = `auto_${topic.replace(/\s+/g, "_")}_${Date.now()}_${i}.json`;
+    const filePath = `${CONVERSATIONS_DIR_PATH}/${filename}`;
+
+    try {
+      const { writeFileSync } = await import("fs");
+      writeFileSync(filePath, JSON.stringify(conv, null, 2), "utf-8");
+      processConversationFile(filePath);
+      db.run(
+        "INSERT INTO conversation_files (filename, email_count, status, topic, source) VALUES (?, ?, 'scheduled', ?, 'auto')",
+        [filename, conv.emails.length, topic]
+      );
+      generated++;
+    } catch (err) {
+      console.error(`[warmup] generateDailyConversations: failed to write ${filename}:`, err);
+    }
+
+    if (i < count - 1) await new Promise((r) => setTimeout(r, 200));
+  }
+
+  console.log(`[warmup] generateDailyConversations: generated ${generated} conversation(s)`);
+  return { generated, skipped: "" };
 }
 
 export function getWarmupStats(): { sent_today: number } {

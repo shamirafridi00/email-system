@@ -122,6 +122,10 @@ export function initDatabase() {
   try { db.exec("ALTER TABLE warmup_log ADD COLUMN pair_id TEXT DEFAULT NULL"); } catch {}
   try { db.exec("ALTER TABLE warmup_log ADD COLUMN topic TEXT DEFAULT NULL"); } catch {}
 
+  // conversation_files migrations
+  try { db.exec("ALTER TABLE conversation_files ADD COLUMN topic TEXT DEFAULT NULL"); } catch {}
+  try { db.exec("ALTER TABLE conversation_files ADD COLUMN source TEXT DEFAULT 'manual'"); } catch {}
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS warmup_schedule (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -241,6 +245,7 @@ export function initDatabase() {
 
   // Seed warmup_running default if not already present
   db.exec("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('warmup_running', '1');");
+  db.exec("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('auto_generate_conversations', '0');");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (

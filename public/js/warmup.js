@@ -1,3 +1,35 @@
+// ─── US Eastern business hours helper (client-side) ─────────────────────────
+function getUSEasternHour() {
+  // Determine DST: second Sunday of March through first Sunday of November
+  var now = new Date();
+  var year = now.getUTCFullYear();
+  function nthSun(month, n) {
+    var d = new Date(Date.UTC(year, month, 1));
+    var daysToSun = d.getUTCDay() === 0 ? 0 : 7 - d.getUTCDay();
+    return new Date(Date.UTC(year, month, 1 + daysToSun + (n - 1) * 7));
+  }
+  var dstStart = nthSun(2, 2); dstStart.setUTCHours(7);  // 2nd Sun Mar 7am UTC
+  var dstEnd   = nthSun(10, 1); dstEnd.setUTCHours(6);   // 1st Sun Nov 6am UTC
+  var offsetH  = (now >= dstStart && now < dstEnd) ? -4 : -5;
+  var eastern  = new Date(now.getTime() + offsetH * 3600000);
+  return { hour: eastern.getUTCHours(), dow: eastern.getUTCDay(), eastern: eastern, offsetH: offsetH };
+}
+
+function isUSBusinessHoursNow() {
+  var e = getUSEasternHour();
+  return e.dow >= 1 && e.dow <= 5 && e.hour >= 8 && e.hour < 18;
+}
+
+function formatUSEastern() {
+  var e = getUSEasternHour();
+  var h = e.hour, m = e.eastern.getUTCMinutes();
+  var ampm = h >= 12 ? 'PM' : 'AM';
+  var h12 = h % 12 || 12;
+  var mm = m < 10 ? '0' + m : m;
+  var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  return days[e.dow] + ' ' + h12 + ':' + mm + ' ' + ampm + ' ET';
+}
+
 // ─── Shared grade metadata (used by both progress cards and accounts table) ───
 var GRADE_META = {
   Excellent: { color: '#4ade80', bg: '#052e16', border: '#166534' },
@@ -284,21 +316,152 @@ async function copyConvPrompt() {
     toast('Prompt copied to clipboard', 'success');
   }
 }
+
+async function loadConversationTopics() {
+  try {
+    var topics = await api('/warmup/conversations/topics');
+    var sel = el('conv-topic-select');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Random topic</option>' +
+      topics.map(function(t) {
+        return '<option value="' + t + '">' + t.charAt(0).toUpperCase() + t.slice(1) + '</option>';
+      }).join('');
+  } catch(e) {}
+}
+
+async function loadAutoGenerateSetting() {
+  try {
+    var s = await api('/warmup/settings/auto-generate');
+    updateAutoGenToggle(s.enabled);
+  } catch(e) {}
+}
+
+function updateAutoGenToggle(enabled) {
+  var btn = el('auto-gen-toggle');
+  var knob = el('auto-gen-knob');
+  var label = el('auto-gen-label');
+  if (!btn) return;
+  if (enabled) {
+    btn.style.background = '#22c55e';
+    knob.style.left = '23px';
+    if (label) { label.textContent = 'On'; label.style.color = '#22c55e'; }
+  } else {
+    btn.style.background = '#374151';
+    knob.style.left = '3px';
+    if (label) { label.textContent = 'Off'; label.style.color = '#6b7280'; }
+  }
+  btn.dataset.enabled = enabled ? '1' : '0';
+}
+
+async function toggleAutoGenerate() {
+  var btn = el('auto-gen-toggle');
+  var currentlyEnabled = btn && btn.dataset.enabled === '1';
+  var newEnabled = !currentlyEnabled;
+  try {
+    await api('/warmup/settings/auto-generate', { method: 'POST', body: JSON.stringify({ enabled: newEnabled }) });
+    updateAutoGenToggle(newEnabled);
+    toast('Daily auto-generate ' + (newEnabled ? 'enabled' : 'disabled'), 'success');
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function generateConversation() {
+  var topic = el('conv-topic-select') ? el('conv-topic-select').value : '';
+  var spinner = el('gen-spinner');
+  var resultEl = el('conv-gen-result');
+  if (spinner) spinner.innerHTML = '<span class="spinner" style="width:10px;height:10px;border-width:2px"></span> ';
+  if (resultEl) resultEl.innerHTML = '';
+
+  try {
+    var payload = {};
+    if (topic) payload.topic = topic;
+    var r = await api('/warmup/conversations/generate', { method: 'POST', body: JSON.stringify(payload) });
+    if (resultEl) {
+      resultEl.innerHTML =
+        '<div style="background:#052e16;border:1px solid #166534;border-radius:8px;padding:14px 16px">' +
+          '<div style="font-size:12px;font-weight:700;color:#4ade80;margin-bottom:8px">✓ Conversation Generated & Scheduled</div>' +
+          '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px">' +
+            convResultField('Topic', r.topic) +
+            convResultField('Emails', r.email_count + ' emails') +
+            convResultField('From', r.sender) +
+            convResultField('To', r.receiver) +
+            '<div style="grid-column:1/-1">' + convResultField('Conversation ID', r.conversation_id) + '</div>' +
+          '</div>' +
+        '</div>';
+    }
+    toast('Conversation generated and scheduled', 'success');
+    loadConversations();
+  } catch(e) {
+    if (resultEl) resultEl.innerHTML = '<div style="color:#ef4444;font-size:13px">' + e.message + '</div>';
+    toast(e.message, 'error');
+  } finally {
+    if (spinner) spinner.innerHTML = '';
+  }
+}
+
+async function generateBulkConversations() {
+  var topic = el('conv-topic-select') ? el('conv-topic-select').value : '';
+  var count = el('conv-bulk-count') ? parseInt(el('conv-bulk-count').value) : 2;
+  var spinner = el('gen-bulk-spinner');
+  var resultEl = el('conv-gen-result');
+  if (spinner) spinner.innerHTML = '<span class="spinner" style="width:10px;height:10px;border-width:2px"></span> ';
+  if (resultEl) resultEl.innerHTML = '';
+
+  try {
+    var payload = { count: count };
+    if (topic) payload.topic = topic;
+    var r = await api('/warmup/conversations/generate-bulk', { method: 'POST', body: JSON.stringify(payload) });
+    if (resultEl) {
+      resultEl.innerHTML =
+        '<div style="background:#052e16;border:1px solid #166534;border-radius:8px;padding:14px 16px">' +
+          '<div style="font-size:12px;font-weight:700;color:#4ade80;margin-bottom:10px">✓ ' + r.generated + ' Conversations Generated & Scheduled</div>' +
+          r.conversations.map(function(c, i) {
+            return '<div style="' + (i > 0 ? 'border-top:1px solid #166534;padding-top:8px;margin-top:8px;' : '') + 'display:grid;grid-template-columns:repeat(3,1fr);gap:6px">' +
+              convResultField('Topic', c.topic) +
+              convResultField('From', c.sender) +
+              convResultField('Emails', c.email_count + '') +
+            '</div>';
+          }).join('') +
+        '</div>';
+    }
+    toast(r.generated + ' conversations generated', 'success');
+    loadConversations();
+  } catch(e) {
+    if (resultEl) resultEl.innerHTML = '<div style="color:#ef4444;font-size:13px">' + e.message + '</div>';
+    toast(e.message, 'error');
+  } finally {
+    if (spinner) spinner.innerHTML = '';
+  }
+}
+
+function convResultField(label, value) {
+  return '<div style="background:#071a0f;border-radius:6px;padding:8px 10px">' +
+    '<div style="font-size:10px;font-weight:700;color:#4b5563;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">' + label + '</div>' +
+    '<div style="font-size:12px;font-weight:600;color:#d1d5db;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + value + '</div>' +
+  '</div>';
+}
+
 async function loadConversations() {
   try {
     const rows = await api('/warmup/conversations');
     el('conv-history-table').innerHTML = rows.length
-      ? '<table><thead><tr><th>Filename</th><th>Emails Scheduled</th><th>Uploaded At</th><th>Status</th></tr></thead><tbody>' +
+      ? '<table><thead><tr><th>Filename</th><th>Topic</th><th>Source</th><th>Emails</th><th>Scheduled At</th><th>Status</th></tr></thead><tbody>' +
         rows.map(function(r) {
+          var sourceBadge = r.source === 'auto'
+            ? '<span style="font-size:11px;font-weight:600;color:#818cf8;background:#1e1b4b;border:1px solid #3730a3;border-radius:4px;padding:2px 7px">Auto</span>'
+            : '<span style="font-size:11px;font-weight:600;color:#6b7280;background:#1f2937;border:1px solid #374151;border-radius:4px;padding:2px 7px">Manual</span>';
           return '<tr>' +
-            '<td style="font-family:monospace;font-size:12px">' + r.filename + '</td>' +
+            '<td style="font-family:monospace;font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + r.filename + '</td>' +
+            '<td style="color:#9ca3af;font-size:12px">' + (r.topic ? r.topic.charAt(0).toUpperCase() + r.topic.slice(1) : '—') + '</td>' +
+            '<td>' + sourceBadge + '</td>' +
             '<td>' + r.email_count + '</td>' +
-            '<td>' + formatTime(r.uploaded_at) + '</td>' +
+            '<td style="white-space:nowrap">' + formatTime(r.uploaded_at) + '</td>' +
             '<td><span class="badge badge-active">' + r.status + '</span></td>' +
             '</tr>';
         }).join('') +
         '</tbody></table>'
-      : '<div class="no-data">No conversation files uploaded yet</div>';
+      : '<div class="no-data">No conversation files yet</div>';
   } catch(e) {
     el('conv-history-table').innerHTML = '<div class="no-data" style="color:#ef4444">' + e.message + '</div>';
   }
@@ -361,6 +524,7 @@ function renderWarmupProgress() {
     var score  = a.health_score || 0;
     var pct    = a.progress_percentage;
     var onTrack = a.emails_sent_today >= a.daily_target;
+    var inBizHours = isUSBusinessHoursNow();
     var bd     = a.score_breakdown || { consistency:{score:0,max:40}, volume:{score:0,max:30}, reply_rate:{score:0,max:20}, reliability:{score:0,max:10} };
     var cardId = 'breakdown-' + a.id;
 
@@ -425,8 +589,10 @@ function renderWarmupProgress() {
         '<div style="display:flex;align-items:center;gap:8px">' +
           '<span style="font-size:13px;font-weight:700;color:#e5e7eb">' + a.emails_sent_today + ' of ' + a.daily_target + ' emails</span>' +
           (onTrack
-            ? '<span style="font-size:11px;font-weight:600;color:#22c55e;background:#052e16;border:1px solid #166534;border-radius:999px;padding:2px 8px">✓ On track</span>'
-            : '<span style="font-size:11px;font-weight:600;color:#f59e0b;background:#292010;border:1px solid #78350f;border-radius:999px;padding:2px 8px">⚠ Behind target</span>') +
+            ? '<span style="font-size:11px;font-weight:600;color:#4ade80;background:#052e16;border:1px solid #166534;border-radius:999px;padding:2px 8px">✓ On track</span>'
+            : !inBizHours
+              ? '<span style="font-size:11px;font-weight:600;color:#9ca3af;background:#1f2937;border:1px solid #374151;border-radius:999px;padding:2px 8px">Outside sending window</span>'
+              : '<span style="font-size:11px;font-weight:600;color:#f59e0b;background:#292010;border:1px solid #78350f;border-radius:999px;padding:2px 8px">⚠ Behind target</span>') +
         '</div>' +
       '</div>' +
 

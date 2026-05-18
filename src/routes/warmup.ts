@@ -3,7 +3,7 @@ import { writeFileSync } from "fs";
 import { join } from "path";
 import nodemailer from "nodemailer";
 import { db } from "../database";
-import { processConversationFile, runWarmupAll, getWarmupStats } from "../modules/warmup";
+import { processConversationFile, runWarmupAll, getWarmupStats, generateConversation, type GeneratedConversation } from "../modules/warmup";
 
 const app = new Hono();
 
@@ -343,16 +343,152 @@ app.post("/upload", async (c) => {
   return c.json({ success: true, scheduled_emails: scheduledCount, filename: safeName });
 });
 
+app.get("/conversations/topics", (c) => {
+  const rows = db
+    .query<{ topic: string }, []>(
+      "SELECT DISTINCT topic FROM warmup_conversations_library WHERE topic IS NOT NULL ORDER BY topic ASC"
+    )
+    .all();
+  return c.json(rows.map((r) => r.topic));
+});
+
+app.post("/conversations/generate", async (c) => {
+  const body = await c.req.json<{ topic?: string; sender_email?: string; receiver_email?: string }>().catch(() => ({}));
+
+  const accounts = db
+    .query<{ id: number; email: string; app_password: string; daily_volume: number; active: number }, []>(
+      "SELECT * FROM warmup_accounts WHERE active = 1"
+    )
+    .all();
+
+  if (accounts.length < 2) {
+    return c.json({ error: "Need at least 2 active warmup accounts to generate a conversation" }, 400);
+  }
+
+  const shuffled = accounts.slice().sort(() => Math.random() - 0.5);
+  const sender = body.sender_email
+    ? accounts.find((a) => a.email === body.sender_email) ?? shuffled[0]
+    : shuffled[0];
+  const receiver = body.receiver_email
+    ? accounts.find((a) => a.email === body.receiver_email && a.email !== sender.email) ?? shuffled.find((a) => a.email !== sender.email)!
+    : shuffled.find((a) => a.email !== sender.email)!;
+
+  let topic = body.topic ?? null;
+  if (!topic) {
+    const row = db
+      .query<{ topic: string }, []>(
+        "SELECT topic FROM warmup_conversations_library ORDER BY RANDOM() LIMIT 1"
+      )
+      .get();
+    topic = row?.topic ?? "project kickoff";
+  }
+
+  const conv = generateConversation(sender.email, receiver.email, topic);
+
+  const filename = `auto_${topic.replace(/\s+/g, "_")}_${Date.now()}.json`;
+  const filePath = join(CONVERSATIONS_DIR, filename);
+  const content = JSON.stringify(conv, null, 2);
+
+  writeFileSync(filePath, content, "utf-8");
+  processConversationFile(filePath);
+
+  db.run(
+    "INSERT INTO conversation_files (filename, email_count, status, topic, source) VALUES (?, ?, 'scheduled', ?, 'auto')",
+    [filename, conv.emails.length, topic]
+  );
+
+  return c.json({
+    success: true,
+    filename,
+    topic,
+    sender: sender.email,
+    receiver: receiver.email,
+    email_count: conv.emails.length,
+    conversation_id: conv.conversation_id,
+  });
+});
+
+app.post("/conversations/generate-bulk", async (c) => {
+  const body = await c.req.json<{ count?: number; topic?: string }>().catch(() => ({}));
+  const count = Math.min(5, Math.max(1, body.count ?? 3));
+
+  const accounts = db
+    .query<{ id: number; email: string; app_password: string; daily_volume: number; active: number }, []>(
+      "SELECT * FROM warmup_accounts WHERE active = 1"
+    )
+    .all();
+
+  if (accounts.length < 2) {
+    return c.json({ error: "Need at least 2 active warmup accounts" }, 400);
+  }
+
+  const results: { filename: string; topic: string; sender: string; receiver: string; email_count: number }[] = [];
+
+  for (let i = 0; i < count; i++) {
+    let topic = body.topic ?? null;
+    if (!topic) {
+      const row = db
+        .query<{ topic: string }, []>(
+          "SELECT topic FROM warmup_conversations_library ORDER BY RANDOM() LIMIT 1"
+        )
+        .get();
+      topic = row?.topic ?? "project kickoff";
+    }
+
+    const shuffled = accounts.slice().sort(() => Math.random() - 0.5);
+    const sender = shuffled[0];
+    const receiver = shuffled.find((a) => a.email !== sender.email)!;
+
+    const conv = generateConversation(sender.email, receiver.email, topic);
+    const filename = `auto_${topic.replace(/\s+/g, "_")}_${Date.now()}_${i}.json`;
+    const filePath = join(CONVERSATIONS_DIR, filename);
+    const content = JSON.stringify(conv, null, 2);
+
+    writeFileSync(filePath, content, "utf-8");
+    processConversationFile(filePath);
+
+    db.run(
+      "INSERT INTO conversation_files (filename, email_count, status, topic, source) VALUES (?, ?, 'scheduled', ?, 'auto')",
+      [filename, conv.emails.length, topic]
+    );
+
+    results.push({ filename, topic, sender: sender.email, receiver: receiver.email, email_count: conv.emails.length });
+
+    if (i < count - 1) await new Promise((r) => setTimeout(r, 100));
+  }
+
+  return c.json({ success: true, generated: results.length, conversations: results });
+});
+
 app.get("/conversations", (c) => {
   const rows = db
     .query<
-      { id: number; filename: string; uploaded_at: string; email_count: number; status: string },
+      { id: number; filename: string; uploaded_at: string; email_count: number; status: string; topic: string | null; source: string | null },
       []
     >(
-      "SELECT id, filename, uploaded_at, email_count, status FROM conversation_files ORDER BY uploaded_at DESC"
+      "SELECT id, filename, uploaded_at, email_count, status, topic, source FROM conversation_files ORDER BY uploaded_at DESC"
     )
     .all();
   return c.json(rows);
+});
+
+app.get("/settings/auto-generate", (c) => {
+  const row = db
+    .query<{ value: string }, []>(
+      "SELECT value FROM system_settings WHERE key = 'auto_generate_conversations'"
+    )
+    .get();
+  return c.json({ enabled: row?.value === "1" });
+});
+
+app.post("/settings/auto-generate", async (c) => {
+  const body = await c.req.json<{ enabled: boolean }>();
+  const val = body.enabled ? "1" : "0";
+  db.run(
+    "INSERT INTO system_settings (key, value) VALUES ('auto_generate_conversations', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    [val]
+  );
+  return c.json({ success: true, enabled: body.enabled });
 });
 
 app.post("/run", async (c) => {

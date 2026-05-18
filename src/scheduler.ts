@@ -3,9 +3,10 @@ import { join } from "path";
 
 import { runSequences } from "./modules/sequences";
 import { checkAllAccounts, checkReplies, type ImapAccount } from "./modules/imap";
-import { runWarmupAll, processConversationFile } from "./modules/warmup";
+import { runWarmupAll, processConversationFile, generateDailyConversations } from "./modules/warmup";
 import { pushToHubspot, getUnpushedReplies } from "./modules/hubspot";
 import { db, resetDailyCounts } from "./database";
+import { isUSBusinessHours } from "./utils/timezone";
 
 const CONVERSATIONS_DIR = join(import.meta.dir, "../conversations");
 const PROCESSED_DIR = join(CONVERSATIONS_DIR, "processed");
@@ -98,43 +99,70 @@ export function startScheduler(): void {
     console.log(`[scheduler] reply check done — pushed ${pushed} to HubSpot`);
   });
 
-  // Job 4 — morning warmup
-  Bun.cron("0 8 * * *", async () => {
-    console.log(`[scheduler] morning warmup starting at ${new Date().toISOString()}`);
-    await runWarmupAll();
-    const count = db
-      .query<{ count: number }, []>(
-        "SELECT COUNT(*) as count FROM warmup_accounts WHERE active = 1"
+  // Job 4 — natural warmup: fires every 30 min Mon–Fri, then decides probabilistically
+  Bun.cron("*/30 * * * 1-5", async () => {
+    if (!isUSBusinessHours()) {
+      console.log(`[scheduler] warmup — outside US business hours, skipping`);
+      return;
+    }
+
+    // ~60% probability per tick for natural irregularity
+    if (Math.random() < 0.40) {
+      console.log(`[scheduler] warmup — skipped this tick (probabilistic)`);
+      return;
+    }
+
+    // Random lead-in delay 0–15 minutes so sends don't land on the half-hour
+    const jitterMs = Math.floor(Math.random() * 900_000);
+    console.log(`[scheduler] warmup — starting in ${Math.round(jitterMs / 60_000)}m`);
+
+    await new Promise((r) => setTimeout(r, jitterMs));
+
+    // Pick a random subset of 2–4 active accounts for this cycle
+    const allAccounts = db
+      .query<{ id: number; email: string; app_password: string; daily_volume: number; active: number }, []>(
+        "SELECT * FROM warmup_accounts WHERE active = 1"
       )
-      .get()?.count ?? 0;
-    console.log(`[scheduler] morning warmup complete — ${count} accounts processed`);
+      .all();
+
+    if (allAccounts.length < 2) {
+      console.log(`[scheduler] warmup — fewer than 2 active accounts, skipping`);
+      return;
+    }
+
+    const subsetSize = Math.min(allAccounts.length, 2 + Math.floor(Math.random() * 3)); // 2–4
+    const shuffled = allAccounts.slice().sort(() => Math.random() - 0.5);
+    const subset = shuffled.slice(0, subsetSize);
+
+    console.log(`[scheduler] warmup — running with ${subset.length} accounts: ${subset.map(a => a.email).join(", ")}`);
+    await runWarmupAll(subset);
+    console.log(`[scheduler] warmup — cycle complete`);
   });
 
-  // Job 5 — afternoon warmup
-  Bun.cron("0 14 * * *", async () => {
-    console.log(`[scheduler] afternoon warmup starting at ${new Date().toISOString()}`);
-    await runWarmupAll();
-    const count = db
-      .query<{ count: number }, []>(
-        "SELECT COUNT(*) as count FROM warmup_accounts WHERE active = 1"
-      )
-      .get()?.count ?? 0;
-    console.log(`[scheduler] afternoon warmup complete — ${count} accounts processed`);
-  });
-
-  // Job 6 — conversation file scanner, every 5 minutes
+  // Job 5 — conversation file scanner, every 5 minutes
   Bun.cron("*/5 * * * *", () => {
     scanConversations();
   });
 
+  // Job 6 — daily auto conversation generator, Mon–Fri at 6am UTC (2am ET)
+  Bun.cron("0 6 * * 1-5", async () => {
+    console.log(`[scheduler] auto-generate conversations at ${new Date().toISOString()}`);
+    const result = await generateDailyConversations();
+    if (result.skipped) {
+      console.log(`[scheduler] auto-generate skipped: ${result.skipped}`);
+    } else {
+      console.log(`[scheduler] auto-generate done — generated ${result.generated} conversation(s)`);
+    }
+  });
+
   console.log(`
 [scheduler] registered jobs:
-  0 0 * * *       — midnight daily count reset
-  0 9-17 * * 1-5  — sequence runner (Mon–Fri, 9am–5pm)
-  0 */2 * * *     — reply check + HubSpot push (every 2h)
-  0 8 * * *       — morning warmup
-  0 14 * * *      — afternoon warmup
-  */5 * * * *     — conversation file scanner (every 5m)
+  0 0 * * *        — midnight daily count reset
+  0 9-17 * * 1-5   — sequence runner (Mon–Fri, 9am–5pm)
+  0 */2 * * *      — reply check + HubSpot push (every 2h)
+  */30 * * * 1-5   — natural warmup (US Eastern business hours, probabilistic)
+  */5 * * * *      — conversation file scanner (every 5m)
+  0 6 * * 1-5      — auto conversation generator (Mon–Fri, 6am UTC / 2am ET)
 `);
 }
 
