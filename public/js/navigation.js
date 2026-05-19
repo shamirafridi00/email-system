@@ -15,6 +15,7 @@ function navigate(section) {
     'warmup-dashboard': loadWarmupDashboard,
     'warmup-progress': loadWarmupProgress,
     'warmup-schedule': loadWarmupSchedule,
+    'warmup-readiness': loadWarmupReadiness,
     'warmup-accounts': loadWarmupAccounts,
     'conversations': function() { loadConversations(); loadConversationTopics(); loadAutoGenerateSetting(); },
     'warmup-log': loadWarmupLog,

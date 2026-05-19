@@ -107,6 +107,7 @@ async function loadWarmupAccountsTable() {
             '<td style="color:' + (r.last_active ? '#888' : '#555') + ';white-space:nowrap">' + shield + (r.last_active ? formatTime(r.last_active) : 'Never') + '</td>' +
             '<td style="display:flex;gap:6px;align-items:center">' +
               '<button id="verify-btn-' + r.id + '" class="btn btn-ghost btn-sm" onclick="verifyAccount(' + r.id + ',\'' + r.email + '\')" style="min-width:74px">✓ Verify</button>' +
+              '<button id="readiness-btn-' + r.id + '" class="btn btn-ghost btn-sm" onclick="runReadinessCheck(' + r.id + ',\'' + r.email + '\')">⚑ Check</button>' +
               '<button class="btn btn-danger btn-sm" onclick="deleteWarmupAccount(' + r.id + ')">Delete</button>' +
             '</td>' +
             '</tr>';
@@ -490,6 +491,13 @@ async function loadWarmupProgress() {
       return;
     }
     progressData = result;
+    // Fetch readiness data in parallel; merge into readinessCache for badge rendering
+    api('/warmup/accounts/readiness-all').then(function(rAll) {
+      if (Array.isArray(rAll)) {
+        rAll.forEach(function(r) { readinessCache[r.id] = r; });
+        renderWarmupProgress();
+      }
+    }).catch(function() {});
     renderWarmupProgress();
   } catch(e) {
     container.innerHTML = '<div class="no-data" style="color:#ef4444">' + (e.message || 'Failed to load progress') + '</div>';
@@ -598,6 +606,20 @@ function renderWarmupProgress() {
 
       readyBanner +
       failureBanner +
+
+      // Readiness score badge (shown when cache is populated)
+      (function() {
+        var rd = readinessCache[a.id];
+        if (!rd) return '';
+        var ss = overallScoreStyle(rd.overall_status);
+        return '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding:8px 12px;border:1px solid ' + ss.border + ';border-radius:6px;background:' + ss.bg + ';cursor:pointer" onclick="renderReadinessModal(readinessCache[' + a.id + '])">' +
+          '<span style="font-size:11px;font-weight:700;color:' + ss.color + ';text-transform:uppercase;letter-spacing:.04em">Readiness Score</span>' +
+          '<div style="display:flex;align-items:center;gap:8px">' +
+            '<span style="font-size:13px;font-weight:800;color:' + ss.color + '">' + rd.overall_score + '/100</span>' +
+            '<span style="font-size:11px;font-weight:600;color:' + ss.color + '">' + rd.overall_status + '</span>' +
+          '</div>' +
+        '</div>';
+      })() +
 
     '</div>';
   }).join('');
@@ -861,4 +883,144 @@ async function loadDashboardScheduleStatus() {
   } catch(e) {
     if (container) container.innerHTML = '<div class="no-data" style="color:#ef4444;font-size:13px">' + e.message + '</div>';
   }
+}
+
+// ─── Warmup Readiness Check ───────────────────────────────────────────────────
+var readinessCache = {};
+
+var CHECK_WEIGHTS = {
+  'DNS Records': 25,
+  'Warmup Duration': 25,
+  'Volume Sufficiency': 20,
+  'Reply Rate': 15,
+  'Authentication Health': 10,
+  'Recent Activity': 5,
+};
+
+function readinessStatusStyle(status) {
+  if (status === 'pass')    return { icon: '✓', color: '#22c55e', bg: '#052e16', border: '#166534' };
+  if (status === 'warning') return { icon: '!', color: '#f59e0b', bg: '#1c1917', border: '#78350f' };
+  return                           { icon: '✗', color: '#ef4444', bg: '#1c0000', border: '#7f1d1d' };
+}
+
+function overallScoreStyle(status) {
+  if (status === 'Ready to Launch') return { bg: '#052e16', color: '#22c55e', border: '#166534' };
+  if (status === 'Almost Ready')    return { bg: '#1c1917', color: '#f59e0b', border: '#78350f' };
+  if (status === 'Needs Work')      return { bg: '#1c0a00', color: '#f97316', border: '#9a3412' };
+  return                                   { bg: '#1c0000', color: '#ef4444', border: '#7f1d1d' };
+}
+
+function renderReadinessCard(r) {
+  var ss = overallScoreStyle(r.overall_status);
+  var statusIcon = r.overall_status === 'Ready to Launch' ? '✓' :
+                   r.overall_status === 'Almost Ready'    ? '◑' :
+                   r.overall_status === 'Needs Work'      ? '⚠' : '✗';
+
+  var checksHtml = r.checks.map(function(c) {
+    var cs = readinessStatusStyle(c.status);
+    return '<div style="display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid #1a1a1a">' +
+      '<div style="flex-shrink:0;width:20px;height:20px;border-radius:50%;background:' + cs.bg + ';border:1px solid ' + cs.border + ';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:' + cs.color + ';margin-top:1px">' + cs.icon + '</div>' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">' +
+          '<span style="font-size:12px;font-weight:700;color:#d1d5db">' + c.name + '</span>' +
+          '<span style="font-size:11px;color:#4b5563;flex-shrink:0">' + c.points_earned + '/' + c.points_max + ' pts</span>' +
+        '</div>' +
+        '<div style="font-size:12px;color:#6b7280;margin-top:2px">' + c.message + '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  var actionHtml = r.overall_status === 'Ready to Launch'
+    ? '<button class="btn btn-success btn-sm" onclick="navigate(\'campaigns\')" style="margin-top:14px;width:100%">Launch Campaign →</button>'
+    : '';
+
+  var worstFail = r.checks.find(function(c) { return c.status === 'fail'; });
+  var criticalHtml = worstFail && r.overall_status !== 'Ready to Launch'
+    ? '<div style="margin-top:12px;background:#1c0000;border:1px solid #7f1d1d;border-radius:6px;padding:10px 12px;font-size:12px;color:#f87171"><strong>Critical:</strong> ' + worstFail.message + '</div>'
+    : '';
+
+  return '<div class="card" style="padding:20px">' +
+    // Top row
+    '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px">' +
+      '<div style="min-width:0;flex:1">' +
+        '<div style="font-size:13px;font-weight:600;color:#e5e7eb;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:8px">' + r.email + '</div>' +
+        '<div style="background:' + ss.bg + ';border:1px solid ' + ss.border + ';border-radius:6px;padding:8px 12px;display:flex;align-items:center;gap:8px">' +
+          '<span style="font-size:15px;color:' + ss.color + '">' + statusIcon + '</span>' +
+          '<span style="font-size:13px;font-weight:700;color:' + ss.color + '">' + r.overall_status + '</span>' +
+        '</div>' +
+      '</div>' +
+      // Score circle
+      '<div style="flex-shrink:0;width:64px;height:64px;border-radius:50%;background:' + ss.bg + ';border:2px solid ' + ss.border + ';display:flex;flex-direction:column;align-items:center;justify-content:center">' +
+        '<div style="font-size:22px;font-weight:800;color:' + ss.color + ';line-height:1">' + r.overall_score + '</div>' +
+        '<div style="font-size:9px;color:' + ss.color + ';opacity:.7;text-transform:uppercase;letter-spacing:.04em">/ 100</div>' +
+      '</div>' +
+    '</div>' +
+    // Checks list
+    '<div style="margin-bottom:4px">' + checksHtml + '</div>' +
+    // Recommendation
+    '<div style="margin-top:12px;font-size:12px;font-style:italic;color:#6b7280;line-height:1.5">' + r.recommendation + '</div>' +
+    criticalHtml +
+    actionHtml +
+  '</div>';
+}
+
+function renderReadinessModal(r) {
+  var overlay = el('readiness-modal-overlay');
+  var content = el('readiness-modal-content');
+  if (!overlay || !content) return;
+  content.innerHTML = renderReadinessCard(r);
+  overlay.style.display = 'block';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeReadinessModal(e) {
+  if (e && e.target !== el('readiness-modal-overlay') && e.type !== 'click') return;
+  var overlay = el('readiness-modal-overlay');
+  if (overlay) overlay.style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+async function runReadinessCheck(id, email) {
+  var btn = el('readiness-btn-' + id);
+  if (btn) { btn.innerHTML = '<span class="spinner" style="width:9px;height:9px;border-width:2px"></span>'; btn.disabled = true; }
+  try {
+    var r = await api('/warmup/accounts/' + id + '/readiness-check', { method: 'POST' });
+    readinessCache[id] = r;
+    renderReadinessModal(r);
+  } catch(e) {
+    toast(e.message, 'error');
+  } finally {
+    if (btn) { btn.innerHTML = '⚑ Check'; btn.disabled = false; }
+  }
+}
+
+async function runReadinessAll() {
+  var grid = el('readiness-cards-grid');
+  var spinner = el('readiness-all-spinner');
+  var lastChecked = el('readiness-last-checked');
+  if (spinner) spinner.innerHTML = '<span class="spinner" style="width:11px;height:11px;border-width:2px"></span> ';
+  if (grid) grid.innerHTML = '<div class="card" style="padding:32px;text-align:center;color:#6b7280"><span class="spinner"></span> Running checks…</div>';
+
+  try {
+    var results = await api('/warmup/accounts/readiness-all');
+    results.forEach(function(r) { readinessCache[r.id] = r; });
+
+    if (lastChecked) lastChecked.textContent = 'Last checked: ' + new Date().toLocaleTimeString();
+
+    if (!results.length) {
+      grid.innerHTML = '<div class="card" style="padding:32px;text-align:center;color:#6b7280">No active warmup accounts found.</div>';
+      return;
+    }
+
+    grid.innerHTML = results.map(renderReadinessCard).join('');
+  } catch(e) {
+    if (grid) grid.innerHTML = '<div class="card" style="padding:32px;color:#ef4444">' + e.message + '</div>';
+    toast(e.message, 'error');
+  } finally {
+    if (spinner) spinner.innerHTML = '';
+  }
+}
+
+async function loadWarmupReadiness() {
+  await runReadinessAll();
 }

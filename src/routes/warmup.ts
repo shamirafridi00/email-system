@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { writeFileSync } from "fs";
 import { join } from "path";
+import { promises as dns } from "dns";
 import nodemailer from "nodemailer";
 import { db } from "../database";
 import { processConversationFile, runWarmupAll, getWarmupStats, generateConversation, type GeneratedConversation } from "../modules/warmup";
@@ -279,6 +280,194 @@ async function verifyAccount(id: number): Promise<{
   }
 }
 
+interface ReadinessCheck {
+  name: string;
+  status: "pass" | "warning" | "fail";
+  message: string;
+  points_earned: number;
+  points_max: number;
+  detail?: string;
+}
+
+interface ReadinessResult {
+  id: number;
+  email: string;
+  overall_score: number;
+  overall_status: string;
+  overall_color: string;
+  recommendation: string;
+  checks: ReadinessCheck[];
+}
+
+async function runReadinessCheckForAccount(id: number): Promise<ReadinessResult | null> {
+  const acct = db
+    .query<{
+      id: number; email: string; warmup_started_at: string | null;
+      consecutive_failures: number;
+    }, [number]>(
+      "SELECT id, email, warmup_started_at, consecutive_failures FROM warmup_accounts WHERE id = ?"
+    )
+    .get(id);
+
+  if (!acct) return null;
+
+  const domain = acct.email.split("@")[1] ?? "";
+  const checks: ReadinessCheck[] = [];
+
+  // ── Check 1: DNS Records (25 pts) ─────────────────────────────────────────
+  let spfPass = false; let spfDetail = "";
+  let dkimPass = false; let dkimDetail = "";
+  let dmarcPass = false; let dmarcDetail = "";
+
+  try {
+    const txtRecords = await dns.resolveTxt(domain);
+    for (const recs of txtRecords) {
+      const joined = recs.join("");
+      if (!spfPass && joined.includes("v=spf1")) { spfPass = true; spfDetail = joined.slice(0, 80); }
+      if (!dkimPass && (joined.includes("p=") || joined.toLowerCase().includes("dkim"))) {
+        dkimPass = true; dkimDetail = joined.slice(0, 80);
+      }
+    }
+  } catch {}
+
+  try {
+    const dmarcRecs = await dns.resolveTxt(`_dmarc.${domain}`);
+    for (const recs of dmarcRecs) {
+      const joined = recs.join("");
+      if (joined.includes("v=DMARC1")) { dmarcPass = true; dmarcDetail = joined.slice(0, 80); }
+    }
+  } catch {}
+
+  const dnsAll = spfPass && dkimPass && dmarcPass;
+  const dnsSome = spfPass || dkimPass || dmarcPass;
+  const dnsParts = [
+    spfPass ? "SPF ✓" : "SPF ✗",
+    dkimPass ? "DKIM ✓" : "DKIM ✗",
+    dmarcPass ? "DMARC ✓" : "DMARC ✗",
+  ].join("  ");
+
+  checks.push({
+    name: "DNS Records",
+    status: dnsAll ? "pass" : dnsSome ? "warning" : "fail",
+    message: dnsAll
+      ? `All DNS records configured — ${dnsParts}`
+      : `Some records missing — ${dnsParts}`,
+    points_earned: dnsAll ? 25 : dnsSome ? 12 : 0,
+    points_max: 25,
+    detail: [spfDetail, dkimDetail, dmarcDetail].filter(Boolean).join(" | ").slice(0, 120) || undefined,
+  });
+
+  // ── Check 2: Warmup Duration (25 pts) ─────────────────────────────────────
+  let durationStatus: "pass" | "warning" | "fail";
+  let durationMsg: string;
+  let durationPts = 0;
+  let daysActive = 0;
+
+  if (!acct.warmup_started_at) {
+    durationStatus = "fail"; durationMsg = "Warmup has not started yet";
+  } else {
+    daysActive = Math.floor((Date.now() - new Date(acct.warmup_started_at).getTime()) / 86_400_000);
+    if (daysActive >= 14) {
+      durationStatus = "pass"; durationMsg = `${daysActive} days active — full warmup complete`; durationPts = 25;
+    } else if (daysActive >= 7) {
+      const rem = 14 - daysActive;
+      durationStatus = "warning"; durationMsg = `${daysActive} days active — ${rem} more day${rem === 1 ? "" : "s"} to go`; durationPts = 13;
+    } else {
+      const rem = 14 - daysActive;
+      durationStatus = "fail"; durationMsg = `Only ${daysActive} day${daysActive === 1 ? "" : "s"} active — ${rem} days remaining`;
+    }
+  }
+
+  checks.push({ name: "Warmup Duration", status: durationStatus, message: durationMsg, points_earned: durationPts, points_max: 25 });
+
+  // ── Check 3: Volume Sufficiency (20 pts) ──────────────────────────────────
+  const totalSent = db
+    .query<{ count: number }, [string]>("SELECT COUNT(*) as count FROM warmup_log WHERE from_email = ?")
+    .get(acct.email)?.count ?? 0;
+
+  let volStatus: "pass" | "warning" | "fail";
+  let volMsg: string; let volPts = 0;
+  if (totalSent >= 50) { volStatus = "pass"; volMsg = `${totalSent} warmup emails sent — excellent volume`; volPts = 20; }
+  else if (totalSent >= 30) { volStatus = "warning"; volMsg = `${totalSent} warmup emails sent — borderline, consider sending more`; volPts = 10; }
+  else { volStatus = "fail"; volMsg = `Only ${totalSent} sent — need at least 30 warmup emails`; }
+
+  checks.push({ name: "Volume Sufficiency", status: volStatus, message: volMsg, points_earned: volPts, points_max: 20 });
+
+  // ── Check 4: Reply Rate (15 pts) ──────────────────────────────────────────
+  const replied = db
+    .query<{ count: number }, [string]>("SELECT COUNT(*) as count FROM warmup_log WHERE from_email = ? AND replied = 1")
+    .get(acct.email)?.count ?? 0;
+
+  const replyRate = totalSent > 0 ? replied / totalSent : 0;
+  const replyPct = (replyRate * 100).toFixed(1);
+  let replyStatus: "pass" | "warning" | "fail";
+  let replyMsg: string; let replyPts = 0;
+  if (replyRate > 0.2) { replyStatus = "pass"; replyMsg = `${replyPct}% reply rate — strong engagement`; replyPts = 15; }
+  else if (replyRate >= 0.1) { replyStatus = "warning"; replyMsg = `${replyPct}% reply rate — acceptable but could be higher`; replyPts = 8; }
+  else { replyStatus = "fail"; replyMsg = totalSent === 0 ? "No emails sent yet" : `${replyPct}% reply rate — too low (need >10%)`; }
+
+  checks.push({ name: "Reply Rate", status: replyStatus, message: replyMsg, points_earned: replyPts, points_max: 15 });
+
+  // ── Check 5: Authentication Health (10 pts) ───────────────────────────────
+  const failures = acct.consecutive_failures ?? 0;
+  let authStatus: "pass" | "warning" | "fail";
+  let authMsg: string; let authPts = 0;
+  if (failures === 0) { authStatus = "pass"; authMsg = "No authentication failures"; authPts = 10; }
+  else if (failures <= 2) { authStatus = "warning"; authMsg = `${failures} consecutive failure${failures > 1 ? "s" : ""} — verify app password`; authPts = 5; }
+  else { authStatus = "fail"; authMsg = `${failures} consecutive failures — fix app password before sending`; }
+
+  checks.push({ name: "Authentication Health", status: authStatus, message: authMsg, points_earned: authPts, points_max: 10 });
+
+  // ── Check 6: Recent Activity (5 pts) ──────────────────────────────────────
+  const recentCount = db
+    .query<{ count: number }, [string]>(
+      "SELECT COUNT(*) as count FROM warmup_log WHERE from_email = ? AND sent_at >= datetime('now', '-3 days')"
+    )
+    .get(acct.email)?.count ?? 0;
+
+  let recentStatus: "pass" | "warning" | "fail";
+  let recentMsg: string; let recentPts = 0;
+  if (recentCount > 0) { recentStatus = "pass"; recentMsg = `${recentCount} email${recentCount === 1 ? "" : "s"} sent in last 3 days`; recentPts = 5; }
+  else { recentStatus = "fail"; recentMsg = "No warmup activity in the last 3 days"; }
+
+  checks.push({ name: "Recent Activity", status: recentStatus, message: recentMsg, points_earned: recentPts, points_max: 5 });
+
+  // ── Overall score ─────────────────────────────────────────────────────────
+  const score = checks.reduce((sum, c) => sum + c.points_earned, 0);
+  let overallStatus: string; let overallColor: string; let recommendation: string;
+  if (score >= 90) {
+    overallStatus = "Ready to Launch"; overallColor = "#22c55e";
+    recommendation = "Your account is well-warmed and ready for real cold email campaigns. Monitor reply rates after launch.";
+  } else if (score >= 70) {
+    overallStatus = "Almost Ready"; overallColor = "#f59e0b";
+    const weak = checks.filter(c => c.status !== "pass").map(c => c.name).join(", ");
+    recommendation = `Address these before launching: ${weak}.`;
+  } else if (score >= 50) {
+    overallStatus = "Needs Work"; overallColor = "#f97316";
+    const failing = checks.filter(c => c.status === "fail").map(c => c.name).join(", ");
+    recommendation = `Fix critical issues first: ${failing || "review all checks"}.`;
+  } else {
+    overallStatus = "Not Ready"; overallColor = "#ef4444";
+    recommendation = "Do not launch campaigns yet. Continue warmup and resolve all failing checks.";
+  }
+
+  return { id: acct.id, email: acct.email, overall_score: score, overall_status: overallStatus, overall_color: overallColor, recommendation, checks };
+}
+
+app.get("/accounts/readiness-all", async (c) => {
+  const accounts = db
+    .query<{ id: number }, []>("SELECT id FROM warmup_accounts WHERE active = 1 ORDER BY id ASC")
+    .all();
+
+  const results: ReadinessResult[] = [];
+  for (const acct of accounts) {
+    const r = await runReadinessCheckForAccount(acct.id);
+    if (r) results.push(r);
+  }
+
+  return c.json(results);
+});
+
 app.post("/accounts/verify-all", async (c) => {
   const accounts = db
     .query<{ id: number }, []>("SELECT id FROM warmup_accounts WHERE active = 1 ORDER BY id ASC")
@@ -293,6 +482,13 @@ app.post("/accounts/verify-all", async (c) => {
   }
 
   return c.json(results);
+});
+
+app.post("/accounts/:id/readiness-check", async (c) => {
+  const id = Number(c.req.param("id"));
+  const result = await runReadinessCheckForAccount(id);
+  if (!result) return c.json({ error: "Account not found" }, 404);
+  return c.json(result);
 });
 
 app.post("/accounts/:id/verify", async (c) => {
