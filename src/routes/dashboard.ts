@@ -52,6 +52,39 @@ app.post("/settings/token", async (c) => {
   return c.json({ success: true });
 });
 
+app.get("/settings/notification-email", (c) => {
+  const row = db.query<{ value: string }, []>("SELECT value FROM system_settings WHERE key = 'notification_email'").get();
+  return c.json({ email: row?.value ?? "" });
+});
+
+app.post("/settings/notification-email", async (c) => {
+  const body = await c.req.json<{ email: string }>();
+  const email = (body.email ?? "").trim();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return c.json({ error: "Invalid email address" }, 400);
+  }
+  db.run(
+    "INSERT INTO system_settings (key, value) VALUES ('notification_email', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    [email]
+  );
+  return c.json({ success: true, email });
+});
+
+app.get("/settings/send-warmup-summary", (c) => {
+  const row = db.query<{ value: string }, []>("SELECT value FROM system_settings WHERE key = 'send_warmup_summary'").get();
+  return c.json({ enabled: row?.value === "1" });
+});
+
+app.post("/settings/send-warmup-summary", async (c) => {
+  const body = await c.req.json<{ enabled: boolean }>();
+  const val = body.enabled ? "1" : "0";
+  db.run(
+    "INSERT INTO system_settings (key, value) VALUES ('send_warmup_summary', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    [val]
+  );
+  return c.json({ success: true, enabled: body.enabled });
+});
+
 const RUN_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 
 app.post("/run-now", async (c) => {

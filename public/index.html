@@ -459,7 +459,7 @@ Replace sender@gmail.com and receiver@gmail.com with two different email address
     <!-- SETTINGS -->
     <div id="section-settings" class="section">
       <div class="section-title" style="margin-bottom:16px">Settings</div>
-      <div class="card" style="max-width:520px">
+      <div class="card" style="max-width:520px;margin-bottom:4px">
         <h3>HubSpot Integration</h3>
         <div class="form-group" style="margin-bottom:12px">
           <label>Private App Token</label>
@@ -477,6 +477,41 @@ Replace sender@gmail.com and receiver@gmail.com with two different email address
           3. Copy the token and paste above<br>
           4. Token is stored in browser localStorage only
         </div>
+      </div>
+
+      <div class="card" style="max-width:520px">
+        <h3>Notification Settings</h3>
+
+        <!-- Notification email -->
+        <div class="form-group" style="margin-bottom:6px">
+          <label>Notification Email</label>
+          <div style="display:flex;gap:8px">
+            <input id="notif-email-input" type="email" placeholder="your@email.com" style="flex:1">
+            <button class="btn btn-primary btn-sm" onclick="saveNotificationEmail()">Save</button>
+          </div>
+          <div style="font-size:11px;color:#6b7280;margin-top:5px">Reports and alerts will be sent to this address.</div>
+        </div>
+
+        <!-- Warmup summary toggle -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-top:1px solid #1f2937;margin-top:14px">
+          <div>
+            <div style="font-size:13px;font-weight:600;color:#e5e7eb">Daily Warmup Summary Email</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px">Sent every morning at 3am ET with yesterday's activity</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span id="notif-summary-badge" style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:#1f2937;color:#6b7280">Disabled</span>
+            <button id="notif-summary-toggle" onclick="toggleWarmupSummary()" style="position:relative;width:44px;height:24px;border-radius:999px;border:none;cursor:pointer;background:#374151;transition:background .2s">
+              <span id="notif-summary-knob" style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .2s"></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div style="display:flex;gap:8px;padding-top:14px;border-top:1px solid #1f2937;flex-wrap:wrap">
+          <button class="btn btn-ghost" onclick="sendTestSummary()"><span id="test-summary-spinner"></span> Send Test Summary</button>
+          <button class="btn btn-ghost" onclick="previewSummaryEmail()">Preview Email</button>
+        </div>
+        <div id="notif-action-result" style="margin-top:10px;font-size:13px"></div>
       </div>
     </div>
 
@@ -929,6 +964,16 @@ John,Smith,john@acme.com,Acme,acme.com,Loved your recent blog post"></textarea>
 
 <div id="toast-container"></div>
 
+<!-- Email preview modal -->
+<div id="email-preview-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1001;overflow-y:auto;padding:40px 20px" onclick="closeEmailPreview(event)">
+  <div style="max-width:640px;margin:0 auto" onclick="event.stopPropagation()">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+      <button onclick="closeEmailPreview()" style="background:#1f2937;border:1px solid #374151;border-radius:6px;color:#9ca3af;font-size:13px;padding:6px 14px;cursor:pointer">✕ Close</button>
+    </div>
+    <div id="email-preview-frame" style="background:#f3f4f6;border-radius:8px;padding:16px;overflow:hidden"></div>
+  </div>
+</div>
+
 <!-- Readiness modal overlay -->
 <div id="readiness-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;overflow-y:auto;padding:40px 20px" onclick="closeReadinessModal(event)">
   <div id="readiness-modal-inner" style="max-width:600px;margin:0 auto" onclick="event.stopPropagation()">
@@ -946,6 +991,7 @@ John,Smith,john@acme.com,Acme,acme.com,Loved your recent blog post"></textarea>
 <script src="/public/js/campaigns.js"></script>
 <script src="/public/js/leads.js"></script>
 <script src="/public/js/accounts.js"></script>
+<script src="/public/js/settings.js"></script>
 <script src="/public/js/navigation.js"></script>
 </body>
 </html>

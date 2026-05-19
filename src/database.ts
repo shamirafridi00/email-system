@@ -280,6 +280,8 @@ export function initDatabase() {
   // Seed warmup_running default if not already present
   db.exec("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('warmup_running', '1');");
   db.exec("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('auto_generate_conversations', '0');");
+  db.exec("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('send_warmup_summary', '0');");
+  db.exec("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('notification_email', '');");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (

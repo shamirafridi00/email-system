@@ -5,6 +5,7 @@ import { promises as dns } from "dns";
 import nodemailer from "nodemailer";
 import { db } from "../database";
 import { processConversationFile, runWarmupAll, getWarmupStats, generateConversation, type GeneratedConversation } from "../modules/warmup";
+import { sendWarmupSummaryEmail } from "../modules/emailReports";
 
 const app = new Hono();
 
@@ -853,6 +854,11 @@ app.post("/settings/auto-generate", async (c) => {
     [val]
   );
   return c.json({ success: true, enabled: body.enabled });
+});
+
+app.post("/reports/send-summary", async (c) => {
+  const result = await sendWarmupSummaryEmail();
+  return c.json(result, result.success ? 200 : 400);
 });
 
 app.post("/run", async (c) => {

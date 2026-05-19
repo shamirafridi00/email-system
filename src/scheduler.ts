@@ -4,6 +4,7 @@ import { join } from "path";
 import { runSequences } from "./modules/sequences";
 import { checkAllAccounts, checkReplies, type ImapAccount } from "./modules/imap";
 import { runWarmupAll, processConversationFile, generateDailyConversations } from "./modules/warmup";
+import { sendWarmupSummaryEmail } from "./modules/emailReports";
 import { pushToHubspot, getUnpushedReplies } from "./modules/hubspot";
 import { db, resetDailyCounts } from "./database";
 import { isUSBusinessHours } from "./utils/timezone";
@@ -155,6 +156,20 @@ export function startScheduler(): void {
     }
   });
 
+  // Job 7 — daily warmup summary email, every day at 7am UTC (3am ET)
+  Bun.cron("0 7 * * *", async () => {
+    const setting = db
+      .query<{ value: string }, []>("SELECT value FROM system_settings WHERE key = 'send_warmup_summary'")
+      .get();
+    if (setting?.value !== "1") {
+      console.log("[scheduler] warmup summary email disabled — skipping");
+      return;
+    }
+    console.log(`[scheduler] sending warmup summary email at ${new Date().toISOString()}`);
+    const result = await sendWarmupSummaryEmail();
+    console.log(`[scheduler] summary email: ${result.success ? "sent" : "failed"} — ${result.message}`);
+  });
+
   console.log(`
 [scheduler] registered jobs:
   0 0 * * *        — midnight daily count reset
@@ -163,6 +178,7 @@ export function startScheduler(): void {
   */30 * * * 1-5   — natural warmup (US Eastern business hours, probabilistic)
   */5 * * * *      — conversation file scanner (every 5m)
   0 6 * * 1-5      — auto conversation generator (Mon–Fri, 6am UTC / 2am ET)
+  0 7 * * *        — daily warmup summary email (7am UTC / 3am ET)
 `);
 }
 

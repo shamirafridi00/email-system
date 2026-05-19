@@ -23,7 +23,7 @@ function navigate(section) {
     'campaigns': loadCampaigns,
     'leads': loadLeads,
     'sending-accounts': loadAccounts,
-    'settings': loadSettings,
+    'settings': function() { loadSettings(); loadNotificationSettings(); },
   };
   if (loaders[section]) loaders[section]();
 }
