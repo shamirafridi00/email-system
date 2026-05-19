@@ -156,8 +156,8 @@ export function startScheduler(): void {
     }
   });
 
-  // Job 7 — daily warmup summary email, every day at 7am UTC (3am ET)
-  Bun.cron("0 7 * * *", async () => {
+  // Job 7 — daily warmup summary email, 2am UTC = 7am Pakistan Standard Time (PKT = UTC+5)
+  Bun.cron("0 2 * * *", async () => {
     const setting = db
       .query<{ value: string }, []>("SELECT value FROM system_settings WHERE key = 'send_warmup_summary'")
       .get();
@@ -178,7 +178,7 @@ export function startScheduler(): void {
   */30 * * * 1-5   — natural warmup (US Eastern business hours, probabilistic)
   */5 * * * *      — conversation file scanner (every 5m)
   0 6 * * 1-5      — auto conversation generator (Mon–Fri, 6am UTC / 2am ET)
-  0 7 * * *        — daily warmup summary email (7am UTC / 3am ET)
+  0 2 * * *        — daily warmup summary email (2am UTC / 7am PKT)
 `);
 }
 

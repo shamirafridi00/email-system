@@ -44,10 +44,15 @@ export function buildWarmupSummaryHTML(data: SummaryData): string {
       : acct.on_track
         ? `<span style="color:#22c55e;font-weight:700">✓</span>`
         : `<span style="color:#f59e0b;font-weight:700">!</span>`;
-    const weekColors: Record<number, string> = { 1: "#f59e0b", 2: "#818cf8", 3: "#22c55e", 4: "#4ade80" };
-    const weekColor = weekColors[acct.current_week] ?? "#6b7280";
-    const weekBadge = acct.current_week > 0
-      ? `<span style="font-size:11px;font-weight:700;padding:2px 7px;border-radius:10px;background:#1f1f1f;color:${weekColor};border:1px solid ${weekColor}40">Wk ${acct.current_week}</span>`
+    const weekStyles: Record<number, { bg: string; color: string }> = {
+      1: { bg: "#1e1b4b", color: "#a5b4fc" },
+      2: { bg: "#052e16", color: "#4ade80" },
+      3: { bg: "#1c0a00", color: "#fb923c" },
+      4: { bg: "#0c0a00", color: "#fbbf24" },
+    };
+    const ws = weekStyles[acct.current_week];
+    const weekBadge = ws
+      ? `<span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700;letter-spacing:.5px;background:${ws.bg};color:${ws.color}">Wk ${acct.current_week}</span>`
       : `<span style="font-size:11px;color:#888">—</span>`;
 
     return `
@@ -171,13 +176,11 @@ export function buildWarmupSummaryHTML(data: SummaryData): string {
 </html>`;
 }
 
-export async function sendWarmupSummaryEmail(): Promise<{ success: boolean; message: string }> {
-  // Yesterday's date
+export function buildSummaryData(): SummaryData {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const yStr = yesterday.toISOString().split("T")[0];
 
-  // Query yesterday's warmup log
   const sentRows = db
     .query<{ from_email: string; to_email: string; replied: number }, []>(
       `SELECT from_email, to_email, replied FROM warmup_log WHERE DATE(sent_at) = '${yStr}'`
@@ -187,13 +190,11 @@ export async function sendWarmupSummaryEmail(): Promise<{ success: boolean; mess
   const totalSent = sentRows.length;
   const totalReceived = sentRows.filter((r) => r.replied === 1).length;
 
-  // Per-account sent counts
   const sentByEmail: Record<string, number> = {};
   for (const r of sentRows) {
     sentByEmail[r.from_email] = (sentByEmail[r.from_email] ?? 0) + 1;
   }
 
-  // All active warmup accounts
   const warmupAccounts = db
     .query<{
       id: number; email: string; warmup_started_at: string | null;
@@ -228,14 +229,12 @@ export async function sendWarmupSummaryEmail(): Promise<{ success: boolean; mess
     };
   });
 
-  // Conversations processed yesterday
   const conversations: ConversationActivity[] = db
     .query<{ filename: string; topic: string | null; source: string | null; email_count: number }, []>(
       `SELECT filename, topic, source, email_count FROM conversation_files WHERE DATE(uploaded_at) = '${yStr}'`
     )
     .all();
 
-  // Health alerts
   const alerts: HealthAlert[] = [];
   for (const acct of accounts) {
     if (acct.consecutive_failures > 0) {
@@ -249,7 +248,7 @@ export async function sendWarmupSummaryEmail(): Promise<{ success: boolean; mess
     }
   }
 
-  const data: SummaryData = {
+  return {
     date: yStr,
     total_sent: totalSent,
     total_received: totalReceived,
@@ -259,6 +258,12 @@ export async function sendWarmupSummaryEmail(): Promise<{ success: boolean; mess
     conversations,
     alerts,
   };
+}
+
+export async function sendWarmupSummaryEmail(): Promise<{ success: boolean; message: string }> {
+  const data = buildSummaryData();
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
 
   const html = buildWarmupSummaryHTML(data);
 
