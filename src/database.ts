@@ -125,6 +125,9 @@ export function initDatabase() {
   // conversation_files migrations
   try { db.exec("ALTER TABLE conversation_files ADD COLUMN topic TEXT DEFAULT NULL"); } catch {}
   try { db.exec("ALTER TABLE conversation_files ADD COLUMN source TEXT DEFAULT 'manual'"); } catch {}
+  try { db.exec("ALTER TABLE conversation_files ADD COLUMN is_duplicate INTEGER DEFAULT 0"); } catch {}
+  try { db.exec("ALTER TABLE conversation_files ADD COLUMN similarity_score INTEGER DEFAULT NULL"); } catch {}
+  try { db.exec("ALTER TABLE conversation_files ADD COLUMN duplicate_of TEXT DEFAULT NULL"); } catch {}
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS warmup_schedule (
@@ -162,6 +165,43 @@ export function initDatabase() {
       receiver_email TEXT,
       last_paired_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       pair_count INTEGER DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS inbox_placement_tests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      test_name TEXT DEFAULT 'Placement Test',
+      sending_account_email TEXT,
+      test_email TEXT,
+      subject TEXT,
+      sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      placement TEXT DEFAULT 'unknown',
+      reported_at DATETIME DEFAULT NULL,
+      notes TEXT DEFAULT NULL,
+      status TEXT DEFAULT 'sent'
+    );
+
+    CREATE TABLE IF NOT EXISTS placement_test_accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT UNIQUE,
+      app_password TEXT,
+      provider TEXT DEFAULT 'gmail',
+      label TEXT DEFAULT '',
+      active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS warmup_reply_queue (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversation_id TEXT,
+      thread_level INTEGER DEFAULT 1,
+      from_email TEXT NOT NULL,
+      to_email TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      scheduled_at DATETIME NOT NULL,
+      status TEXT DEFAULT 'pending',
+      parent_log_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
@@ -282,6 +322,32 @@ export function initDatabase() {
   db.exec("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('auto_generate_conversations', '0');");
   db.exec("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('send_warmup_summary', '0');");
   db.exec("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('notification_email', '');");
+  db.exec("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('dashboard_url', 'http://localhost:3000');");
+  db.exec("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('system_name', 'GTM Warmup System');");
+
+  // Backfill account_status_history for accounts that existed before history tracking
+  const histCount = db.query<{ count: number }, []>("SELECT COUNT(*) as count FROM account_status_history").get();
+  if (histCount && histCount.count === 0) {
+    const existingAccounts = db.query<{
+      id: number; email: string; status: string | null
+    }, []>("SELECT id, email, status FROM warmup_accounts").all();
+
+    const insertHistory = db.prepare(
+      `INSERT INTO account_status_history (account_id, account_email, previous_status, new_status, reason, changed_at)
+       VALUES (?, ?, NULL, ?, 'Account existed before history tracking was added', ?)`
+    );
+    for (const acct of existingAccounts) {
+      insertHistory.run(
+        acct.id,
+        acct.email,
+        acct.status || 'warming',
+        new Date().toISOString()
+      );
+    }
+    if (existingAccounts.length > 0) {
+      console.log(`Backfilled account_status_history for ${existingAccounts.length} existing account(s)`);
+    }
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (

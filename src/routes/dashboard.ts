@@ -85,6 +85,36 @@ app.post("/settings/send-warmup-summary", async (c) => {
   return c.json({ success: true, enabled: body.enabled });
 });
 
+app.get("/settings/system-name", (c) => {
+  const row = db.query<{ value: string }, []>("SELECT value FROM system_settings WHERE key = 'system_name'").get();
+  return c.json({ name: row?.value ?? "GTM Warmup System" });
+});
+
+app.post("/settings/system-name", async (c) => {
+  const body = await c.req.json<{ name: string }>();
+  const name = (body.name ?? "").trim();
+  db.run(
+    "INSERT INTO system_settings (key, value) VALUES ('system_name', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    [name]
+  );
+  return c.json({ success: true, name });
+});
+
+app.get("/settings/dashboard-url", (c) => {
+  const row = db.query<{ value: string }, []>("SELECT value FROM system_settings WHERE key = 'dashboard_url'").get();
+  return c.json({ url: row?.value ?? "http://localhost:3000" });
+});
+
+app.post("/settings/dashboard-url", async (c) => {
+  const body = await c.req.json<{ url: string }>();
+  const url = (body.url ?? "").trim();
+  db.run(
+    "INSERT INTO system_settings (key, value) VALUES ('dashboard_url', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    [url]
+  );
+  return c.json({ success: true, url });
+});
+
 const RUN_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 
 app.post("/run-now", async (c) => {

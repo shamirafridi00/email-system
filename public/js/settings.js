@@ -10,6 +10,91 @@ async function loadNotificationSettings() {
     var sumRes = await api('/dashboard/settings/send-warmup-summary');
     updateSummaryToggle(sumRes.enabled);
   } catch(e) {}
+
+  await loadSystemName();
+  await loadDashboardUrl();
+}
+
+async function loadSystemName() {
+  try {
+    var res = await api('/dashboard/settings/system-name');
+    var inp = el('system-name-input');
+    if (inp) inp.value = res.name || '';
+  } catch(e) {}
+}
+
+async function saveSystemName() {
+  var inp = el('system-name-input');
+  var name = inp ? inp.value.trim() : '';
+  try {
+    await api('/dashboard/settings/system-name', { method: 'POST', body: JSON.stringify({ name: name }) });
+    toast('System name saved', 'success');
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function loadDashboardUrl() {
+  try {
+    var res = await api('/dashboard/settings/dashboard-url');
+    var inp = el('dashboard-url-input');
+    if (inp) inp.value = res.url || '';
+  } catch(e) {}
+}
+
+async function saveDashboardUrl() {
+  var inp = el('dashboard-url-input');
+  var url = inp ? inp.value.trim() : '';
+  try {
+    await api('/dashboard/settings/dashboard-url', { method: 'POST', body: JSON.stringify({ url: url }) });
+    toast(url ? 'Dashboard URL saved' : 'Dashboard URL cleared', 'success');
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function sendTestCompleteNotification() {
+  var btn = el('test-complete-notif-btn');
+  var resultEl = el('notif-complete-result');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  if (resultEl) resultEl.innerHTML = '';
+  try {
+    var r = await api('/warmup/reports/test-complete-notification', { method: 'POST' });
+    if (r.success) {
+      toast('Test complete notification sent to your notification email', 'success');
+      if (resultEl) resultEl.innerHTML = '<span style="color:#22c55e">✓ ' + r.message + '</span>';
+    } else {
+      toast(r.message, 'error');
+      if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">' + r.message + '</span>';
+    }
+  } catch(e) {
+    toast(e.message || 'No notification email configured', 'error');
+    if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">' + (e.message || 'Failed') + '</span>';
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Send Test Notification'; }
+  }
+}
+
+async function sendTestFailureAlert() {
+  var spinner = el('test-alert-spinner');
+  var resultEl = el('notif-alert-result');
+  if (spinner) spinner.innerHTML = '<span class="spinner" style="width:10px;height:10px;border-width:2px"></span> ';
+  if (resultEl) resultEl.innerHTML = '';
+  try {
+    var r = await api('/warmup/reports/test-failure-alert', { method: 'POST' });
+    if (r.success) {
+      toast(r.message, 'success');
+      if (resultEl) resultEl.innerHTML = '<span style="color:#22c55e">✓ ' + r.message + '</span>';
+    } else {
+      toast(r.message, 'error');
+      if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">' + r.message + '</span>';
+    }
+  } catch(e) {
+    toast(e.message, 'error');
+    if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">' + e.message + '</span>';
+  } finally {
+    if (spinner) spinner.innerHTML = '';
+  }
 }
 
 function updateSummaryToggle(enabled) {

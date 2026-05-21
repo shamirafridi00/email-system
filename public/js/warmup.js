@@ -49,6 +49,252 @@ async function loadWarmupStatus() {
   } catch(e) { el('warmup-status-badge').innerHTML = ''; }
 }
 
+// ─── Account Groups ───────────────────────────────────────────────────────────
+var GROUP_COLORS = [
+  { bg: '#1e1b4b', color: '#a5b4fc' },
+  { bg: '#052e16', color: '#4ade80' },
+  { bg: '#1c0a00', color: '#fb923c' },
+  { bg: '#0c0a00', color: '#fbbf24' },
+  { bg: '#0c0a1a', color: '#818cf8' },
+  { bg: '#071e20', color: '#2dd4bf' },
+  { bg: '#1a0a1a', color: '#e879f9' },
+  { bg: '#0a0a1a', color: '#60a5fa' },
+];
+
+function groupColor(name) {
+  var hash = 0;
+  for (var i = 0; i < name.length; i++) { hash = (hash * 31 + name.charCodeAt(i)) >>> 0; }
+  return GROUP_COLORS[hash % GROUP_COLORS.length];
+}
+
+var groupsData = [];
+var groupsAccounts = [];
+var groupLastRun = {};
+var groupCollapseState = {};
+
+async function loadAccountGroups() {
+  try {
+    var results = await Promise.all([
+      api('/warmup/accounts/groups'),
+      api('/warmup/accounts'),
+      api('/warmup/accounts/progress'),
+    ]);
+    groupsData = results[0] || [];
+    var rawAccounts = results[1] || [];
+    var progMap = {};
+    if (Array.isArray(results[2])) results[2].forEach(function(p) { progMap[p.id] = p; });
+    groupsAccounts = rawAccounts.map(function(a) {
+      return Object.assign({}, a, progMap[a.id] || {});
+    });
+    renderGroupCards();
+    renderGroupsAssignTable();
+    renderGroupControls();
+  } catch(e) {
+    toast(e.message || 'Failed to load groups', 'error');
+  }
+}
+
+function renderGroupCards() {
+  var grid = el('groups-cards-grid');
+  if (!grid) return;
+  if (!groupsData.length) {
+    grid.innerHTML = '<div class="no-data" style="grid-column:1/-1">No groups yet. Add warmup accounts to see groups here.</div>';
+    return;
+  }
+  grid.innerHTML = groupsData.map(function(g) {
+    var gc = groupColor(g.group_name);
+    var hsColor = g.avg_health_score >= 70 ? '#4ade80' : g.avg_health_score >= 50 ? '#f59e0b' : '#f87171';
+    var hsBg    = g.avg_health_score >= 70 ? '#052e16' : g.avg_health_score >= 50 ? '#1c1200' : '#1c0000';
+    var collapsed = groupCollapseState[g.group_name] === true;
+    var enc = encodeURIComponent(g.group_name);
+    var arrow = collapsed ? '▶' : '▼';
+    var bodyStyle = collapsed ? 'display:none' : 'display:block';
+    return '<div class="card" style="margin:0">' +
+      // Header row — always visible
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px' + (collapsed ? '' : ';margin-bottom:12px') + '">' +
+        '<div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1">' +
+          '<div style="font-size:15px;font-weight:700;color:#e5e7eb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + g.group_name + '</div>' +
+          '<span style="display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;flex-shrink:0;background:' + gc.bg + ';color:' + gc.color + '">' + g.account_count + ' acct' + (g.account_count !== 1 ? 's' : '') + '</span>' +
+        '</div>' +
+        '<button onclick="toggleGroupCard(\'' + enc + '\')" style="background:none;border:none;color:#6b7280;font-size:12px;cursor:pointer;padding:2px 6px;flex-shrink:0" title="' + (collapsed ? 'Expand' : 'Collapse') + '">' + arrow + '</button>' +
+      '</div>' +
+      // Collapsible body
+      '<div style="' + bodyStyle + '">' +
+        '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px">' +
+          '<div style="background:#0d0d0d;border:1px solid #1f2937;border-radius:6px;padding:8px;text-align:center">' +
+            '<div style="font-size:16px;font-weight:800;color:#e5e7eb">' + g.active_count + '</div>' +
+            '<div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">Active</div>' +
+          '</div>' +
+          '<div style="background:#0d0d0d;border:1px solid #1f2937;border-radius:6px;padding:8px;text-align:center">' +
+            '<div style="font-size:16px;font-weight:800;color:#e5e7eb">' + g.sent_today + '</div>' +
+            '<div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">Sent Today</div>' +
+          '</div>' +
+          '<div style="background:' + hsBg + ';border:1px solid #1f2937;border-radius:6px;padding:8px;text-align:center">' +
+            '<div style="font-size:16px;font-weight:800;color:' + hsColor + '">' + g.avg_health_score + '</div>' +
+            '<div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">Avg Health</div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+          '<button class="btn btn-ghost btn-sm" style="border-color:#6366f1;color:#6366f1;font-size:11px" onclick="renameGroup(\'' + enc + '\')">Rename</button>' +
+          (g.group_name !== 'default'
+            ? '<button class="btn btn-ghost btn-sm" style="border-color:#ef4444;color:#ef4444;font-size:11px" onclick="deleteGroup(\'' + enc + '\')">Delete</button>'
+            : '') +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function toggleGroupCard(encodedName) {
+  var name = decodeURIComponent(encodedName);
+  groupCollapseState[name] = !groupCollapseState[name];
+  renderGroupCards();
+}
+
+function collapseAllGroups() {
+  groupsData.forEach(function(g) { groupCollapseState[g.group_name] = true; });
+  renderGroupCards();
+}
+
+function expandAllGroups() {
+  groupsData.forEach(function(g) { groupCollapseState[g.group_name] = false; });
+  renderGroupCards();
+}
+
+function renderGroupsAssignTable() {
+  var wrap = el('groups-assign-table');
+  if (!wrap) return;
+  if (!groupsAccounts.length) { wrap.innerHTML = '<div class="no-data">No warmup accounts found.</div>'; return; }
+
+  var allGroups = groupsData.map(function(g) { return g.group_name; });
+  if (!allGroups.includes('default')) allGroups.unshift('default');
+
+  wrap.innerHTML = '<table><thead><tr><th>Email</th><th>Current Group</th><th style="text-align:center">Health</th><th>Change Group</th></tr></thead><tbody>' +
+    groupsAccounts.map(function(a) {
+      var gName = a.group_name || 'default';
+      var gc = groupColor(gName);
+      var grade = a.health_grade || 'Critical';
+      var gm = GRADE_META[grade] || GRADE_META.Critical;
+      var opts = allGroups.map(function(g) {
+        return '<option value="' + g + '"' + (g === gName ? ' selected' : '') + '>' + g + '</option>';
+      }).join('') + '<option value="__new__">+ New group…</option>';
+      return '<tr>' +
+        '<td style="font-family:monospace;font-size:12px">' + a.email + '</td>' +
+        '<td><span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;background:' + gc.bg + ';color:' + gc.color + '">' + gName + '</span></td>' +
+        '<td style="text-align:center"><span style="font-size:12px;font-weight:700;color:' + gm.color + '">' + (a.health_score || 0) + '</span></td>' +
+        '<td><select style="background:#111;border:1px solid #374151;border-radius:4px;color:#e5e7eb;font-size:12px;padding:3px 6px" onchange="assignAccountToGroup(' + a.id + ', this)">' + opts + '</select></td>' +
+      '</tr>';
+    }).join('') +
+  '</tbody></table>';
+}
+
+function renderGroupControls() {
+  var cont = el('groups-controls');
+  if (!cont) return;
+  if (!groupsData.length) { cont.innerHTML = '<div class="no-data">No groups found.</div>'; return; }
+  cont.innerHTML = groupsData.map(function(g) {
+    var gc = groupColor(g.group_name);
+    var lastRun = groupLastRun[g.group_name] ? 'Last run: ' + groupLastRun[g.group_name] : 'Not run this session';
+    return '<div class="card" style="margin:0;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px">' +
+      '<div style="display:flex;align-items:center;gap:10px;min-width:0">' +
+        '<span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;flex-shrink:0;background:' + gc.bg + ';color:' + gc.color + '">' + g.group_name + '</span>' +
+        '<span style="font-size:12px;color:#4b5563">' + g.active_count + ' active · ' + g.sent_today + ' sent today</span>' +
+        '<span id="group-lastrun-' + encodeURIComponent(g.group_name) + '" style="font-size:11px;color:#374151">' + lastRun + '</span>' +
+      '</div>' +
+      '<button id="group-run-btn-' + encodeURIComponent(g.group_name) + '" class="btn btn-ghost btn-sm" style="border-color:#6366f1;color:#6366f1;flex-shrink:0" onclick="runGroupWarmup(\'' + encodeURIComponent(g.group_name) + '\')">▶ Run Warmup</button>' +
+    '</div>';
+  }).join('');
+}
+
+async function createGroup() {
+  var inp = el('new-group-name');
+  var name = inp ? inp.value.trim() : '';
+  if (!name) { toast('Enter a group name', 'error'); return; }
+  if (groupsData.some(function(g) { return g.group_name.toLowerCase() === name.toLowerCase(); })) {
+    toast('A group with that name already exists', 'error'); return;
+  }
+  toast('Group "' + name + '" ready — assign accounts to it using the table below', 'success');
+  if (inp) inp.value = '';
+  // Optimistically add to local data so dropdown shows it immediately
+  groupsData.push({ group_name: name, account_count: 0, active_count: 0, sent_today: 0, avg_health_score: 0 });
+  renderGroupCards();
+  renderGroupsAssignTable();
+  renderGroupControls();
+}
+
+async function renameGroup(encodedName) {
+  var oldName = decodeURIComponent(encodedName);
+  var newName = window.prompt('Rename group "' + oldName + '" to:', oldName);
+  if (!newName || !newName.trim()) return;
+  newName = newName.trim();
+  if (newName === oldName) return;
+  // Frontend duplicate check (case-insensitive)
+  if (groupsData.some(function(g) { return g.group_name.toLowerCase() === newName.toLowerCase() && g.group_name !== oldName; })) {
+    toast('A group with that name already exists', 'error'); return;
+  }
+  try {
+    await api('/warmup/accounts/groups/rename', { method: 'POST', body: JSON.stringify({ old_name: oldName, new_name: newName }) });
+    toast('Group renamed to "' + newName + '"', 'success');
+    loadAccountGroups();
+  } catch(e) {
+    toast(e.message || 'Rename failed', 'error');
+  }
+}
+
+async function deleteGroup(encodedName) {
+  var name = decodeURIComponent(encodedName);
+  var confirmed = window.confirm('Delete group "' + name + '"?\n\nAll accounts in this group will be moved to the "default" group.');
+  if (!confirmed) return;
+  try {
+    await api('/warmup/accounts/groups/' + encodedName + '?move_to=default', { method: 'DELETE' });
+    toast('Group "' + name + '" deleted — accounts moved to default', 'success');
+    loadAccountGroups();
+  } catch(e) {
+    toast(e.message || 'Delete failed', 'error');
+  }
+}
+
+async function assignAccountToGroup(id, selectEl) {
+  var prev = selectEl.dataset.prev || selectEl.value;
+  var value = selectEl.value;
+  if (value === '__new__') {
+    var name = window.prompt('New group name:');
+    if (!name || !name.trim()) { selectEl.value = prev; return; }
+    name = name.trim();
+    if (!name) { selectEl.value = prev; return; }
+    value = name;
+  }
+  selectEl.dataset.prev = value;
+  try {
+    await api('/warmup/accounts/' + id + '/group', { method: 'PUT', body: JSON.stringify({ group_name: value }) });
+    toast('Account moved to "' + value + '"', 'success');
+    loadAccountGroups();
+  } catch(e) {
+    toast(e.message || 'Failed to update group', 'error');
+    selectEl.value = prev;
+  }
+}
+
+async function runGroupWarmup(encodedName) {
+  var name = decodeURIComponent(encodedName);
+  var btnId = 'group-run-btn-' + encodedName;
+  var btn = el(btnId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Running…'; }
+  try {
+    var r = await api('/warmup/accounts/groups/run', { method: 'POST', body: JSON.stringify({ group_name: name }) });
+    toast(r.message || 'Warmup triggered for ' + name, 'success');
+    var now = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    groupLastRun[name] = now;
+    var lastRunEl = el('group-lastrun-' + encodedName);
+    if (lastRunEl) lastRunEl.textContent = 'Last run: ' + now;
+    loadAccountGroups();
+  } catch(e) {
+    toast(e.message || 'Warmup failed', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '▶ Run Warmup'; }
+  }
+}
+
 // ─── Warmup Accounts ─────────────────────────────────────────────────────────
 async function loadWarmupAccounts() {
   await Promise.all([loadWarmupAccountsTable(), loadWarmupStatsCard(), loadWarmupStatus()]);
@@ -108,6 +354,7 @@ async function loadWarmupAccountsTable() {
             '<td style="display:flex;gap:6px;align-items:center">' +
               '<button id="verify-btn-' + r.id + '" class="btn btn-ghost btn-sm" onclick="verifyAccount(' + r.id + ',\'' + r.email + '\')" style="min-width:74px">✓ Verify</button>' +
               '<button id="readiness-btn-' + r.id + '" class="btn btn-ghost btn-sm" onclick="runReadinessCheck(' + r.id + ',\'' + r.email + '\')">⚑ Check</button>' +
+              '<button class="btn btn-ghost btn-sm" onclick="showAccountHistory(' + r.id + ',\'' + r.email + '\')" title="View status history">🕐</button>' +
               '<button class="btn btn-danger btn-sm" onclick="deleteWarmupAccount(' + r.id + ')">Delete</button>' +
             '</td>' +
             '</tr>';
@@ -126,6 +373,106 @@ async function loadWarmupStatsCard() {
     if (el('warmup-stats')) el('warmup-stats').innerHTML = html;
     if (el('warmup-stats-log')) el('warmup-stats-log').innerHTML = html;
   } catch(e) {}
+}
+
+async function downloadImportTemplate() {
+  try {
+    var res = await fetch('/warmup/accounts/import-template', { credentials: 'include' });
+    if (!res.ok) throw new Error('Failed to download template');
+    var blob = await res.blob();
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'warmup-accounts-template.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    toast(e.message || 'Download failed', 'error');
+  }
+}
+
+async function bulkImportAccounts() {
+  var csv = el('bulk-import-csv') ? el('bulk-import-csv').value.trim() : '';
+  if (!csv) { toast('Paste CSV content before importing', 'error'); return; }
+
+  try {
+    var r = await api('/warmup/accounts/bulk-import', { method: 'POST', body: JSON.stringify({ csv: csv }) });
+
+    // Show results card
+    var resultsEl = el('bulk-import-results');
+    if (resultsEl) resultsEl.style.display = 'block';
+
+    var importedCount = el('bulk-imported-count');
+    if (importedCount) importedCount.textContent = r.imported || 0;
+
+    var skippedStat = el('bulk-skipped-stat');
+    var skippedCount = el('bulk-skipped-count');
+    if (r.skipped > 0) {
+      if (skippedStat) skippedStat.style.display = 'block';
+      if (skippedCount) skippedCount.textContent = r.skipped;
+    } else {
+      if (skippedStat) skippedStat.style.display = 'none';
+    }
+
+    // Show imported emails list
+    var importedList = el('bulk-imported-list');
+    if (importedList) {
+      if (r.imported_emails && r.imported_emails.length > 0) {
+        importedList.style.display = 'block';
+        importedList.textContent = r.imported_emails.join(', ');
+      } else {
+        importedList.style.display = 'none';
+      }
+    }
+
+    // Show skipped table
+    var skippedTable = el('bulk-skipped-table');
+    if (skippedTable) {
+      if (r.skipped_details && r.skipped_details.length > 0) {
+        skippedTable.style.display = 'block';
+        skippedTable.innerHTML =
+          '<div style="font-size:11px;font-weight:700;color:#f59e0b;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Skipped Accounts</div>' +
+          '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
+          '<thead><tr style="background:#1f2937"><th style="padding:6px 10px;text-align:left;color:#9ca3af;font-weight:600">Email</th><th style="padding:6px 10px;text-align:left;color:#9ca3af;font-weight:600">Reason</th></tr></thead>' +
+          '<tbody>' +
+          r.skipped_details.map(function(s) {
+            return '<tr style="border-bottom:1px solid #1f2937"><td style="padding:7px 10px;font-family:monospace;color:#e5e7eb">' + s.email + '</td><td style="padding:7px 10px;color:#f59e0b">' + s.reason + '</td></tr>';
+          }).join('') +
+          '</tbody></table>';
+      } else {
+        skippedTable.style.display = 'none';
+        skippedTable.innerHTML = '';
+      }
+    }
+
+    if (r.imported > 0) {
+      toast(r.imported + ' account' + (r.imported !== 1 ? 's' : '') + ' imported successfully', 'success');
+    }
+    if (r.skipped > 0) {
+      toast(r.skipped + ' account' + (r.skipped !== 1 ? 's' : '') + ' skipped', 'error');
+    }
+    if (r.imported > 0 && r.skipped === 0) {
+      var csvEl = el('bulk-import-csv');
+      if (csvEl) csvEl.value = '';
+    }
+
+    loadWarmupAccountsTable();
+  } catch(e) {
+    toast(e.message || 'Import failed', 'error');
+  }
+}
+
+function clearBulkImport() {
+  var csvEl = el('bulk-import-csv');
+  if (csvEl) csvEl.value = '';
+  var resultsEl = el('bulk-import-results');
+  if (resultsEl) resultsEl.style.display = 'none';
+  var importedList = el('bulk-imported-list');
+  if (importedList) { importedList.style.display = 'none'; importedList.textContent = ''; }
+  var skippedTable = el('bulk-skipped-table');
+  if (skippedTable) { skippedTable.style.display = 'none'; skippedTable.innerHTML = ''; }
 }
 
 async function addWarmupAccount() {
@@ -379,9 +726,17 @@ async function generateConversation() {
     if (topic) payload.topic = topic;
     var r = await api('/warmup/conversations/generate', { method: 'POST', body: JSON.stringify(payload) });
     if (resultEl) {
+      var dc = r.duplicate_check || {};
+      var simLabel = dc.is_duplicate
+        ? '<span style="color:#ef4444;font-weight:700">⚠ Duplicate (' + dc.highest_similarity_score + '% similar)</span>'
+        : (dc.highest_similarity_score >= 40
+            ? '<span style="color:#f59e0b">〜 Similar (' + dc.highest_similarity_score + '% — acceptable)</span>'
+            : '<span style="color:#4ade80">✓ Unique</span>');
+
       resultEl.innerHTML =
         '<div style="background:#052e16;border:1px solid #166534;border-radius:8px;padding:14px 16px">' +
           '<div style="font-size:12px;font-weight:700;color:#4ade80;margin-bottom:8px">✓ Conversation Generated & Scheduled</div>' +
+          (r.warning ? '<div style="font-size:11px;color:#f59e0b;margin-bottom:8px;padding:6px 10px;background:#1a1200;border:1px solid #78350f;border-radius:6px">⚠ ' + r.warning + '</div>' : '') +
           '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px">' +
             convResultField('Topic', r.topic) +
             convResultField('Emails', r.email_count + ' emails') +
@@ -389,6 +744,7 @@ async function generateConversation() {
             convResultField('To', r.receiver) +
             '<div style="grid-column:1/-1">' + convResultField('Conversation ID', r.conversation_id) + '</div>' +
           '</div>' +
+          '<div style="margin-top:8px;font-size:12px;color:#6b7280">Similarity: ' + simLabel + '</div>' +
         '</div>';
     }
     toast('Conversation generated and scheduled', 'success');
@@ -447,11 +803,23 @@ async function loadConversations() {
   try {
     const rows = await api('/warmup/conversations');
     el('conv-history-table').innerHTML = rows.length
-      ? '<table><thead><tr><th>Filename</th><th>Topic</th><th>Source</th><th>Emails</th><th>Scheduled At</th><th>Status</th></tr></thead><tbody>' +
+      ? '<table><thead><tr><th>Filename</th><th>Topic</th><th>Source</th><th>Emails</th><th>Scheduled At</th><th>Status</th><th>Similarity</th></tr></thead><tbody>' +
         rows.map(function(r) {
           var sourceBadge = r.source === 'auto'
             ? '<span style="font-size:11px;font-weight:600;color:#818cf8;background:#1e1b4b;border:1px solid #3730a3;border-radius:4px;padding:2px 7px">Auto</span>'
             : '<span style="font-size:11px;font-weight:600;color:#6b7280;background:#1f2937;border:1px solid #374151;border-radius:4px;padding:2px 7px">Manual</span>';
+
+          var simCell = '—';
+          if (r.is_duplicate) {
+            var tip = 'Similarity: ' + (r.similarity_score || '?') + '%' + (r.duplicate_of ? ' — similar to ' + r.duplicate_of : '');
+            simCell = '<span title="' + tip + '" style="cursor:help;font-size:14px">⚠️</span>';
+          } else if (r.similarity_score != null && r.similarity_score >= 40) {
+            var tip2 = 'Similarity: ' + r.similarity_score + '%' + (r.duplicate_of ? ' — similar to ' + r.duplicate_of : '');
+            simCell = '<span title="' + tip2 + '" style="cursor:help;font-size:14px;color:#f59e0b">〜</span>';
+          } else if (r.similarity_score != null) {
+            simCell = '<span style="font-size:14px;color:#4ade80" title="Unique">✓</span>';
+          }
+
           return '<tr>' +
             '<td style="font-family:monospace;font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + r.filename + '</td>' +
             '<td style="color:#9ca3af;font-size:12px">' + (r.topic ? r.topic.charAt(0).toUpperCase() + r.topic.slice(1) : '—') + '</td>' +
@@ -459,6 +827,7 @@ async function loadConversations() {
             '<td>' + r.email_count + '</td>' +
             '<td style="white-space:nowrap">' + formatTime(r.uploaded_at) + '</td>' +
             '<td><span class="badge badge-active">' + r.status + '</span></td>' +
+            '<td style="text-align:center">' + simCell + '</td>' +
             '</tr>';
         }).join('') +
         '</tbody></table>'
@@ -537,7 +906,13 @@ function renderWarmupProgress() {
     var cardId = 'breakdown-' + a.id;
 
     var readyBanner = a.readiness_status === 'ready'
-      ? '<div style="margin-top:10px;background:#052e16;border:1px solid #166534;border-radius:6px;padding:10px 14px;font-size:12px;font-weight:600;color:#22c55e">✓ This account is ready for real campaigns</div>'
+      ? '<div style="margin-top:12px;background:#052e16;border:2px solid #4ade80;border-radius:10px;padding:14px 18px;display:flex;align-items:center;gap:12px">' +
+          '<div style="font-size:24px;flex-shrink:0">✅</div>' +
+          '<div>' +
+            '<div style="font-size:13px;font-weight:800;color:#4ade80;letter-spacing:.01em">Warmup Complete — Ready to Launch</div>' +
+            '<div style="font-size:11px;color:#86efac;margin-top:2px">This account has completed its warmup journey. Start sending real campaigns.</div>' +
+          '</div>' +
+        '</div>'
       : '';
     var failureBanner = a.consecutive_failures > 2
       ? '<div style="margin-top:10px;background:#1c0a0a;border:1px solid #7f1d1d;border-radius:6px;padding:10px 14px;font-size:12px;font-weight:600;color:#ef4444">⚠ Authentication issues detected. Check app password.</div>'
@@ -652,16 +1027,87 @@ function statBox(label, value) {
   '</div>';
 }
 
-async function uploadConversation() {
-  const filename = el('conv-filename').value.trim();
-  const content = el('conv-content').value.trim();
+async function checkConversationDuplicate() {
+  var content = (el('conv-content') || {}).value || '';
+  var resultEl = el('conv-dup-result');
+  if (!content.trim()) { toast('Paste JSON content first', 'error'); return; }
+
+  var parsed;
+  try { parsed = JSON.parse(content); } catch(e) { toast('Invalid JSON: ' + e.message, 'error'); return; }
+
+  try {
+    var r = await api('/warmup/conversations/check-duplicate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversation_json: parsed }),
+    });
+    if (resultEl) resultEl.innerHTML = parseDuplicateResult(r);
+  } catch(e) {
+    if (resultEl) resultEl.innerHTML = '<div style="color:#ef4444;font-size:12px">' + e.message + '</div>';
+  }
+}
+
+function parseDuplicateResult(r) {
+  if (!r) return '';
+  var score = r.highest_similarity_score || 0;
+
+  if (r.is_duplicate) {
+    var dup = r.duplicates && r.duplicates[0];
+    var dupInfo = dup ? ' Similar to <strong>' + dup.conversation_id + '</strong> (' + new Date(dup.uploaded_at).toLocaleDateString() + '). Score: ' + score + '%.' : '';
+    return '<div style="background:#1c0000;border:1px solid #7f1d1d;border-radius:6px;padding:10px 14px;font-size:12px;color:#fca5a5">' +
+      '⚠ High similarity detected.' + dupInfo + '<br>' +
+      '<div style="margin-top:8px;display:flex;gap:8px">' +
+        '<button class="btn btn-ghost btn-sm" onclick="uploadConversation(true)" style="border-color:#ef4444;color:#ef4444">Use Anyway</button>' +
+        '<button class="btn btn-ghost btn-sm" onclick="el(\'conv-content\').value=\'\';el(\'conv-dup-result\').innerHTML=\'\'">Discard & Try Again</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  if (score >= 40) {
+    var sim = r.duplicates && r.duplicates[0];
+    var simInfo = sim ? ' Similar to <strong>' + sim.conversation_id + '</strong> (' + score + '%).' : '';
+    return '<div style="background:#1a1200;border:1px solid #78350f;border-radius:6px;padding:10px 14px;font-size:12px;color:#fcd34d">' +
+      '〜 Similar to recent conversations but acceptable.' + simInfo +
+    '</div>';
+  }
+
+  return '<div style="background:#052e16;border:1px solid #166534;border-radius:6px;padding:10px 14px;font-size:12px;color:#4ade80">' +
+    '✓ No duplicates found. This conversation looks unique.' +
+  '</div>';
+}
+
+async function uploadConversation(confirmed) {
+  const filename = (el('conv-filename') || {}).value.trim();
+  const content  = (el('conv-content')  || {}).value.trim();
   if (!filename || !content) { toast('Filename and content required', 'error'); return; }
+
+  // Parse for duplicate check
+  var parsed;
+  try { parsed = JSON.parse(content); } catch(e) { toast('Invalid JSON: ' + e.message, 'error'); return; }
+
+  // If not already confirmed by user, run duplicate check first
+  if (!confirmed) {
+    try {
+      var dc = await api('/warmup/conversations/check-duplicate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversation_json: parsed }),
+      });
+      var dupEl = el('conv-dup-result');
+      if (dc.is_duplicate && dc.highest_similarity_score > 70) {
+        if (dupEl) dupEl.innerHTML = parseDuplicateResult(dc);
+        return; // Wait for user to click "Use Anyway"
+      }
+    } catch(e) { /* non-blocking — proceed */ }
+  }
+
   try {
     const r = await api('/warmup/upload', { method: 'POST', body: JSON.stringify({ filename: filename, content: content }) });
     toast('Scheduled ' + r.scheduled_emails + ' emails from ' + r.filename, 'success');
     el('conv-result').innerHTML = '<div style="color:#22c55e;font-size:13px">✓ Scheduled ' + r.scheduled_emails + ' emails from <strong>' + r.filename + '</strong></div>';
     el('conv-filename').value = '';
-    el('conv-content').value = '';
+    el('conv-content').value  = '';
+    if (el('conv-dup-result')) el('conv-dup-result').innerHTML = '';
     loadConversations();
   } catch(e) {
     el('conv-result').innerHTML = '<div style="color:#ef4444;font-size:13px">' + e.message + '</div>';
@@ -1023,4 +1469,1466 @@ async function runReadinessAll() {
 
 async function loadWarmupReadiness() {
   await runReadinessAll();
+}
+
+// ─── Account Status History ───────────────────────────────────────────────────
+var historyData     = [];
+var historyFiltered = [];
+var historyPage     = 0;
+var HISTORY_PAGE_SIZE = 20;
+
+var STATUS_LABELS = {
+  active:  { label: 'Active',  color: '#4ade80' },
+  paused:  { label: 'Paused',  color: '#f59e0b' },
+  flagged: { label: 'Flagged', color: '#f87171' },
+};
+
+function historyStatusBadge(status) {
+  var m = STATUS_LABELS[status] || { label: status, color: '#9ca3af' };
+  return '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;background:' +
+         m.color + '22;color:' + m.color + ';border:1px solid ' + m.color + '44">' + m.label + '</span>';
+}
+
+function renderHistoryTable() {
+  var wrap = el('history-table-wrap');
+  if (!wrap) return;
+
+  var start = historyPage * HISTORY_PAGE_SIZE;
+  var page  = historyFiltered.slice(start, start + HISTORY_PAGE_SIZE);
+  var total = historyFiltered.length;
+  var totalPages = Math.max(1, Math.ceil(total / HISTORY_PAGE_SIZE));
+
+  var indicator = el('hist-page-indicator');
+  var prevBtn   = el('hist-prev-btn');
+  var nextBtn   = el('hist-next-btn');
+  if (indicator) indicator.textContent = 'Page ' + (historyPage + 1) + ' of ' + totalPages + ' (' + total + ' records)';
+  if (prevBtn)   prevBtn.disabled  = historyPage === 0;
+  if (nextBtn)   nextBtn.disabled  = historyPage >= totalPages - 1;
+
+  if (!page.length) {
+    wrap.innerHTML = '<div style="padding:32px;text-align:center;color:#6b7280">No history records match the current filters.</div>';
+    return;
+  }
+
+  wrap.innerHTML = '<table class="data-table"><thead><tr>' +
+    '<th>Account</th><th>Status</th><th>Reason</th><th>Changed At</th>' +
+    '</tr></thead><tbody>' +
+    page.map(function(h) {
+      var date = h.changed_at ? new Date(h.changed_at).toLocaleString() : '—';
+      return '<tr>' +
+        '<td style="font-family:monospace;font-size:12px">' + (h.account_email || '—') + '</td>' +
+        '<td>' + historyStatusBadge(h.status) + '</td>' +
+        '<td style="color:#d1d5db;font-size:12px;max-width:320px">' + (h.reason || '—') + '</td>' +
+        '<td style="color:#9ca3af;font-size:12px;white-space:nowrap">' + date + '</td>' +
+      '</tr>';
+    }).join('') +
+    '</tbody></table>';
+}
+
+function applyHistoryFilters() {
+  var accountVal = (el('hist-filter-account') || {}).value || '';
+  var statusVal  = (el('hist-filter-status')  || {}).value || '';
+  var fromVal    = (el('hist-filter-from')    || {}).value || '';
+  var toVal      = (el('hist-filter-to')      || {}).value || '';
+
+  historyFiltered = historyData.filter(function(h) {
+    if (accountVal && String(h.account_id) !== accountVal) return false;
+    if (statusVal  && h.status !== statusVal)               return false;
+    if (fromVal) {
+      var from = new Date(fromVal);
+      if (new Date(h.changed_at) < from) return false;
+    }
+    if (toVal) {
+      var to = new Date(toVal);
+      to.setHours(23, 59, 59, 999);
+      if (new Date(h.changed_at) > to) return false;
+    }
+    return true;
+  });
+
+  historyPage = 0;
+  updateHistoryStats();
+  renderHistoryTable();
+}
+
+function updateHistoryStats() {
+  var total      = historyFiltered.length;
+  var flagged    = historyFiltered.filter(function(h) { return h.status === 'flagged'; }).length;
+  var pauses     = historyFiltered.filter(function(h) { return h.status === 'paused';  }).length;
+  var recoveries = historyFiltered.filter(function(h) {
+    return h.status === 'active' && h.reason && h.reason.toLowerCase().includes('verified');
+  }).length;
+
+  if (el('hist-stat-total'))      el('hist-stat-total').textContent      = total;
+  if (el('hist-stat-flagged'))    el('hist-stat-flagged').textContent    = flagged;
+  if (el('hist-stat-pauses'))     el('hist-stat-pauses').textContent     = pauses;
+  if (el('hist-stat-recoveries')) el('hist-stat-recoveries').textContent = recoveries;
+}
+
+function filterHistory() {
+  applyHistoryFilters();
+}
+
+function clearHistoryFilters() {
+  ['hist-filter-account','hist-filter-status','hist-filter-from','hist-filter-to'].forEach(function(id) {
+    var el2 = el(id);
+    if (el2) el2.value = '';
+  });
+  applyHistoryFilters();
+}
+
+function historyPrevPage() {
+  if (historyPage > 0) { historyPage--; renderHistoryTable(); }
+}
+
+function historyNextPage() {
+  var totalPages = Math.ceil(historyFiltered.length / HISTORY_PAGE_SIZE);
+  if (historyPage < totalPages - 1) { historyPage++; renderHistoryTable(); }
+}
+
+async function loadAccountHistory() {
+  var wrap = el('history-table-wrap');
+  if (wrap) wrap.innerHTML = '<div style="padding:32px;text-align:center;color:#6b7280"><span class="spinner"></span> Loading history…</div>';
+
+  try {
+    var data = await api('/warmup/accounts/history/all');
+    historyData = data;
+
+    // Populate account filter dropdown
+    var accountSel = el('hist-filter-account');
+    if (accountSel) {
+      var seen = {};
+      var opts = '<option value="">All Accounts</option>';
+      data.forEach(function(h) {
+        if (h.account_id && !seen[h.account_id]) {
+          seen[h.account_id] = true;
+          opts += '<option value="' + h.account_id + '">' + (h.account_email || h.account_id) + '</option>';
+        }
+      });
+      accountSel.innerHTML = opts;
+    }
+
+    applyHistoryFilters();
+  } catch(e) {
+    if (wrap) wrap.innerHTML = '<div style="padding:32px;color:#ef4444">' + e.message + '</div>';
+    toast(e.message, 'error');
+  }
+}
+
+function exportHistoryCSV() {
+  if (!historyFiltered.length) { toast('No records to export', 'error'); return; }
+
+  var header = ['Account', 'Status', 'Reason', 'Changed At'];
+  var rows = [header].concat(historyFiltered.map(function(h) {
+    return [
+      h.account_email || '',
+      h.status        || '',
+      (h.reason || '').replace(/"/g, '""'),
+      h.changed_at ? new Date(h.changed_at).toLocaleString() : '',
+    ].map(function(v) { return '"' + v + '"'; });
+  }));
+
+  var csv  = rows.map(function(r) { return r.join(','); }).join('\n');
+  var blob = new Blob([csv], { type: 'text/csv' });
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'account-history.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function clearAccountHistory(id, email) {
+  if (!confirm('Clear ALL status history for ' + email + '? This cannot be undone.')) return;
+  try {
+    var r = await api('/warmup/accounts/' + id + '/history', { method: 'DELETE' });
+    toast('Cleared ' + (r.deleted || 0) + ' history record(s) for ' + email, 'success');
+    // Remove from local cache and re-render
+    historyData     = historyData.filter(function(h) { return h.account_id !== id; });
+    applyHistoryFilters();
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function showAccountHistory(id, email) {
+  var modal   = el('account-history-modal');
+  var content = el('acct-hist-content');
+  var emailEl = el('acct-hist-email');
+  var clearBtn = el('acct-hist-clear-btn');
+
+  if (emailEl) emailEl.textContent = email;
+  if (content) content.innerHTML = '<div style="padding:24px;text-align:center;color:#6b7280"><span class="spinner"></span> Loading…</div>';
+  if (clearBtn) { clearBtn.onclick = function() { clearAccountHistory(id, email); closeAccountHistoryModal(); }; }
+  if (modal) modal.style.display = 'flex';
+
+  try {
+    var data = await api('/warmup/accounts/' + id + '/history');
+    var history = data.history || [];
+
+    if (!history.length) {
+      if (content) content.innerHTML = '<div style="padding:24px;color:#6b7280">No history records for this account.</div>';
+      return;
+    }
+
+    if (content) {
+      content.innerHTML = '<table class="data-table"><thead><tr>' +
+        '<th>Status</th><th>Reason</th><th>Changed At</th>' +
+        '</tr></thead><tbody>' +
+        history.map(function(h) {
+          var date = h.changed_at ? new Date(h.changed_at).toLocaleString() : '—';
+          return '<tr>' +
+            '<td>' + historyStatusBadge(h.status) + '</td>' +
+            '<td style="color:#d1d5db;font-size:12px;max-width:280px">' + (h.reason || '—') + '</td>' +
+            '<td style="color:#9ca3af;font-size:12px;white-space:nowrap">' + date + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table>';
+    }
+  } catch(e) {
+    if (content) content.innerHTML = '<div style="padding:24px;color:#ef4444">' + e.message + '</div>';
+  }
+}
+
+function closeAccountHistoryModal(event) {
+  if (!event || event.target === el('account-history-modal')) {
+    var modal = el('account-history-modal');
+    if (modal) modal.style.display = 'none';
+  }
+}
+
+// ─── Conversation Topics Library ──────────────────────────────────────────────
+var topicsLibraryData = [];
+
+async function loadTopicsLibrary() {
+  var grid = el('topics-library-grid');
+  if (grid) grid.innerHTML = '<div class="card" style="padding:32px;text-align:center;color:#6b7280"><span class="spinner"></span> Loading topics…</div>';
+  try {
+    topicsLibraryData = await api('/warmup/library/topics');
+    renderTopicsGrid(topicsLibraryData);
+  } catch(e) {
+    if (grid) grid.innerHTML = '<div class="card" style="padding:32px;color:#ef4444">' + e.message + '</div>';
+  }
+}
+
+function renderTopicsGrid(topics) {
+  var grid = el('topics-library-grid');
+  var badge = el('lib-count-badge');
+  if (badge) badge.textContent = topics.length + ' topic' + (topics.length !== 1 ? 's' : '') + ' in library';
+  if (!grid) return;
+
+  if (!topics.length) {
+    grid.innerHTML = '<div class="card" style="grid-column:1/-1;padding:32px;text-align:center;color:#6b7280">No topics found. Add your first topic above.</div>';
+    return;
+  }
+
+  grid.innerHTML = topics.map(function(t) { return renderTopicCard(t); }).join('');
+}
+
+function renderTopicCard(t) {
+  var usageColor  = t.usage_count > 0 ? '#6b7280' : '#374151';
+  var usageText   = 'Used ' + t.usage_count + ' time' + (t.usage_count !== 1 ? 's' : '');
+  var senderPrev  = (t.body_sender  || '').substring(0, 120) + ((t.body_sender  || '').length > 120 ? '…' : '');
+  var receiverPrev = (t.body_receiver || '').substring(0, 120) + ((t.body_receiver || '').length > 120 ? '…' : '');
+
+  return '<div class="card" id="topic-card-' + t.id + '" style="padding:18px 20px;display:flex;flex-direction:column;gap:12px">' +
+    '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">' +
+      '<div style="font-size:15px;font-weight:800;color:#e5e7eb;line-height:1.3">' + escHtml(t.topic) + '</div>' +
+      '<span style="font-size:11px;color:' + usageColor + ';background:#1f2937;border:1px solid #374151;padding:2px 8px;border-radius:999px;white-space:nowrap;flex-shrink:0">' + usageText + '</span>' +
+    '</div>' +
+    '<div style="font-size:12px;color:#9ca3af"><span style="color:#6b7280">Subject: </span>' + escHtml(t.subject) + '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+      '<div style="background:#0f1923;border:1px solid #1f2937;border-radius:6px;padding:10px">' +
+        '<div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">Sender</div>' +
+        '<div style="font-size:12px;color:#d1d5db;line-height:1.5">' + escHtml(senderPrev) + '</div>' +
+      '</div>' +
+      '<div style="background:#0f1923;border:1px solid #1f2937;border-radius:6px;padding:10px">' +
+        '<div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">Receiver</div>' +
+        '<div style="font-size:12px;color:#d1d5db;line-height:1.5">' + escHtml(receiverPrev) + '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+      '<button class="btn btn-ghost btn-sm" onclick="editTopic(' + t.id + ')" style="border-color:#4338ca;color:#a5b4fc">Edit</button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="previewTopic(' + t.id + ')">Preview Conversation</button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="confirmDeleteTopic(' + t.id + ',' + t.usage_count + ')" style="border-color:#ef4444;color:#ef4444">Delete</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function escHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function filterTopicsBySearch() {
+  var q = (el('lib-search') || {}).value || '';
+  q = q.toLowerCase().trim();
+  if (!q) { renderTopicsGrid(topicsLibraryData); return; }
+  var filtered = topicsLibraryData.filter(function(t) {
+    return t.topic.toLowerCase().includes(q);
+  });
+  renderTopicsGrid(filtered);
+}
+
+function searchTopics() { filterTopicsBySearch(); }
+
+function showAddTopicForm() {
+  var card = el('add-topic-form-card');
+  if (card) { card.style.display = 'block'; card.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  ['new-topic-name','new-topic-subject','new-topic-sender','new-topic-receiver'].forEach(function(id) {
+    var e = el(id); if (e) e.value = '';
+  });
+  var res = el('add-topic-result'); if (res) res.textContent = '';
+}
+
+function hideAddTopicForm() {
+  var card = el('add-topic-form-card');
+  if (card) card.style.display = 'none';
+}
+
+function toggleLibTips() {
+  var body = el('lib-tips-body');
+  var btn  = el('lib-tips-toggle');
+  if (!body) return;
+  var visible = body.style.display !== 'none';
+  body.style.display = visible ? 'none' : 'block';
+  if (btn) btn.textContent = (visible ? '▶' : '▼') + ' Writing Tips';
+}
+
+async function saveTopic() {
+  var topic       = ((el('new-topic-name')     || {}).value || '').trim();
+  var subject     = ((el('new-topic-subject')  || {}).value || '').trim();
+  var body_sender = ((el('new-topic-sender')   || {}).value || '').trim();
+  var body_receiver = ((el('new-topic-receiver') || {}).value || '').trim();
+  var res = el('add-topic-result');
+
+  if (!topic || !subject || !body_sender || !body_receiver) {
+    if (res) { res.style.color = '#ef4444'; res.textContent = 'All four fields are required.'; }
+    return;
+  }
+
+  try {
+    var created = await api('/warmup/library/topics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic, subject, body_sender, body_receiver }),
+    });
+    topicsLibraryData.unshift(created);
+    hideAddTopicForm();
+    renderTopicsGrid(topicsLibraryData);
+    toast('Topic "' + created.topic + '" added successfully', 'success');
+  } catch(e) {
+    if (res) { res.style.color = '#ef4444'; res.textContent = e.message; }
+  }
+}
+
+function editTopic(id) {
+  var t = topicsLibraryData.find(function(x) { return x.id === id; });
+  if (!t) return;
+  var card = el('topic-card-' + id);
+  if (!card) return;
+
+  card.innerHTML =
+    '<div style="font-size:13px;font-weight:700;color:#a5b4fc;margin-bottom:12px">Edit Topic</div>' +
+    '<div class="form-group" style="margin-bottom:10px"><label style="font-size:11px">Topic Name</label>' +
+      '<input id="edit-topic-name-' + id + '" value="' + escHtml(t.topic) + '"></div>' +
+    '<div class="form-group" style="margin-bottom:10px"><label style="font-size:11px">Subject Line</label>' +
+      '<input id="edit-topic-subject-' + id + '" value="' + escHtml(t.subject) + '"></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">' +
+      '<div class="form-group" style="margin:0"><label style="font-size:11px">Sender Message</label>' +
+        '<textarea id="edit-topic-sender-' + id + '" rows="5">' + escHtml(t.body_sender) + '</textarea></div>' +
+      '<div class="form-group" style="margin:0"><label style="font-size:11px">Receiver Reply</label>' +
+        '<textarea id="edit-topic-receiver-' + id + '" rows="5">' + escHtml(t.body_receiver) + '</textarea></div>' +
+    '</div>' +
+    '<div style="display:flex;gap:8px">' +
+      '<button class="btn btn-primary" onclick="saveEditTopic(' + id + ')" style="background:#4338ca;border-color:#4338ca">Save Changes</button>' +
+      '<button class="btn btn-ghost" onclick="cancelEditTopic(' + id + ')">Cancel</button>' +
+    '</div>' +
+    '<div id="edit-topic-result-' + id + '" style="margin-top:8px;font-size:12px"></div>';
+}
+
+function cancelEditTopic(id) {
+  var t = topicsLibraryData.find(function(x) { return x.id === id; });
+  if (!t) return;
+  var card = el('topic-card-' + id);
+  if (card) card.outerHTML = renderTopicCard(t);
+}
+
+async function saveEditTopic(id) {
+  var topic       = ((el('edit-topic-name-'     + id) || {}).value || '').trim();
+  var subject     = ((el('edit-topic-subject-'  + id) || {}).value || '').trim();
+  var body_sender = ((el('edit-topic-sender-'   + id) || {}).value || '').trim();
+  var body_receiver = ((el('edit-topic-receiver-' + id) || {}).value || '').trim();
+  var res = el('edit-topic-result-' + id);
+
+  if (!topic || !subject || !body_sender || !body_receiver) {
+    if (res) { res.style.color = '#ef4444'; res.textContent = 'All four fields are required.'; }
+    return;
+  }
+
+  try {
+    var updated = await api('/warmup/library/topics/' + id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic, subject, body_sender, body_receiver }),
+    });
+    var idx = topicsLibraryData.findIndex(function(x) { return x.id === id; });
+    if (idx !== -1) topicsLibraryData[idx] = updated;
+    var card = el('topic-card-' + id);
+    if (card) card.outerHTML = renderTopicCard(updated);
+    toast('Topic updated', 'success');
+  } catch(e) {
+    if (res) { res.style.color = '#ef4444'; res.textContent = e.message; }
+  }
+}
+
+async function previewTopic(id) {
+  var t = topicsLibraryData.find(function(x) { return x.id === id; });
+  var modal   = el('topic-preview-modal');
+  var content = el('preview-modal-content');
+  var topicEl = el('preview-modal-topic');
+
+  if (topicEl) topicEl.textContent = t ? t.topic : '';
+  if (content) content.innerHTML = '<div style="padding:24px;text-align:center;color:#6b7280"><span class="spinner"></span> Generating preview…</div>';
+  if (modal) modal.style.display = 'flex';
+
+  try {
+    var conv = await api('/warmup/library/topics/' + id + '/preview');
+    var emails = conv.emails || [];
+
+    if (content) {
+      content.innerHTML = '<div style="display:flex;flex-direction:column;gap:14px">' +
+        emails.map(function(email, i) {
+          var isSender = i % 2 === 0;
+          var align  = isSender ? 'flex-start' : 'flex-end';
+          var bg     = isSender ? '#1e1b4b' : '#052e16';
+          var border = isSender ? '#3730a3' : '#166534';
+          var nameColor = isSender ? '#a5b4fc' : '#4ade80';
+          var label  = isSender ? 'Sender' : 'Receiver';
+          var time   = email.scheduled_time_offset_minutes != null
+            ? 'T+' + email.scheduled_time_offset_minutes + ' min'
+            : '';
+
+          return '<div style="display:flex;justify-content:' + align + '">' +
+            '<div style="max-width:85%;background:' + bg + ';border:1px solid ' + border + ';border-radius:8px;padding:12px 14px">' +
+              '<div style="font-size:10px;font-weight:700;color:' + nameColor + ';text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">' + label + '</div>' +
+              '<div style="font-size:11px;color:#6b7280;margin-bottom:6px">Subject: ' + escHtml(email.subject || '') + '</div>' +
+              '<div style="font-size:13px;color:#e5e7eb;line-height:1.6">' + escHtml(email.body || '') + '</div>' +
+              (time ? '<div style="font-size:10px;color:#4b5563;margin-top:8px">' + time + '</div>' : '') +
+            '</div>' +
+          '</div>';
+        }).join('') +
+      '</div>';
+    }
+  } catch(e) {
+    if (content) content.innerHTML = '<div style="padding:24px;color:#ef4444">' + e.message + '</div>';
+  }
+}
+
+function closeTopicPreviewModal(event) {
+  if (!event || event.target === el('topic-preview-modal')) {
+    var modal = el('topic-preview-modal');
+    if (modal) modal.style.display = 'none';
+  }
+}
+
+function confirmDeleteTopic(id, usageCount) {
+  var card = el('topic-card-' + id);
+  if (!card) return;
+  var t = topicsLibraryData.find(function(x) { return x.id === id; });
+  var name = t ? t.topic : 'this topic';
+
+  // Remove any existing confirmation row
+  var existing = card.querySelector('.delete-confirm-row');
+  if (existing) { existing.remove(); return; }
+
+  var warn = usageCount > 0
+    ? 'This topic has been used ' + usageCount + ' time(s). Deletion will not affect already-scheduled conversations.'
+    : 'This action cannot be undone.';
+
+  var row = document.createElement('div');
+  row.className = 'delete-confirm-row';
+  row.style.cssText = 'margin-top:8px;padding:10px 12px;background:#1c0000;border:1px solid #7f1d1d;border-radius:6px;font-size:12px';
+  row.innerHTML =
+    '<div style="color:#fca5a5;margin-bottom:8px">Are you sure? ' + escHtml(warn) + '</div>' +
+    '<div style="display:flex;gap:8px">' +
+      '<button class="btn btn-ghost btn-sm" onclick="doDeleteTopic(' + id + ')" style="border-color:#ef4444;color:#ef4444">Yes, Delete</button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="this.closest(\'.delete-confirm-row\').remove()">Cancel</button>' +
+    '</div>';
+  card.appendChild(row);
+}
+
+async function doDeleteTopic(id) {
+  try {
+    var r = await api('/warmup/library/topics/' + id, { method: 'DELETE' });
+    topicsLibraryData = topicsLibraryData.filter(function(x) { return x.id !== id; });
+    var card = el('topic-card-' + id);
+    if (card) {
+      card.style.transition = 'opacity .3s';
+      card.style.opacity = '0';
+      setTimeout(function() {
+        card.remove();
+        renderTopicsGrid(topicsLibraryData);
+      }, 300);
+    }
+    toast('Deleted topic "' + (r.deleted_topic || '') + '"', 'success');
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+}
+
+// ─── Warmup Calendar ──────────────────────────────────────────────────────────
+var calendarState = {
+  currentMonth: new Date().getMonth() + 1,
+  currentYear:  new Date().getFullYear(),
+  calendarData: null,
+  selectedDay:  null,
+  dayPanelOpen: false,
+};
+
+var MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+async function loadWarmupCalendar() {
+  var grid = el('cal-grid');
+  if (grid) grid.innerHTML = '<div style="grid-column:1/-1;padding:40px;text-align:center;color:#6b7280"><span class="spinner"></span> Loading calendar…</div>';
+
+  var label = el('cal-month-label');
+  if (label) label.textContent = MONTH_NAMES[calendarState.currentMonth - 1] + ' ' + calendarState.currentYear;
+
+  try {
+    var data = await api('/warmup/calendar?month=' + calendarState.currentMonth + '&year=' + calendarState.currentYear);
+    calendarState.calendarData = data;
+    updateCalendarStats(data.monthly_summary);
+    renderCalendar(data);
+  } catch(e) {
+    if (grid) grid.innerHTML = '<div style="grid-column:1/-1;padding:40px;color:#ef4444">' + e.message + '</div>';
+  }
+}
+
+function updateCalendarStats(s) {
+  if (!s) return;
+  if (el('cal-stat-convs'))  el('cal-stat-convs').textContent  = s.total_conversations;
+  if (el('cal-stat-sent'))   el('cal-stat-sent').textContent   = s.total_emails_sent;
+  if (el('cal-stat-active')) el('cal-stat-active').textContent = s.days_with_activity;
+  if (el('cal-stat-avg'))    el('cal-stat-avg').textContent    = s.average_daily_sends;
+}
+
+function renderCalendar(data) {
+  var grid = el('cal-grid');
+  if (!grid) return;
+
+  var label = el('cal-month-label');
+  if (label) label.textContent = MONTH_NAMES[data.month - 1] + ' ' + data.year;
+
+  // First day of month DOW offset
+  var firstDOW = data.days[0].day_of_week;
+  var cells = '';
+
+  // Empty leading cells
+  for (var i = 0; i < firstDOW; i++) {
+    cells += '<div style="min-height:90px;background:#0a0f14;border-right:1px solid #1f2937;border-bottom:1px solid #1f2937"></div>';
+  }
+
+  // Day cells
+  data.days.forEach(function(day) {
+    var isSelected = calendarState.selectedDay === day.date;
+    var isGap = day.is_us_business_day && day.conversations.length === 0 && day.emails_sent === 0;
+
+    var bg = day.is_weekend ? '#0d1117' : (isGap ? '#1a1500' : '#0f1923');
+    var border = isSelected ? '2px solid #818cf8' : (day.is_today ? '2px solid #4338ca' : '1px solid #1f2937');
+
+    // Conversation dots
+    var dots = '';
+    var dotCount = Math.min(3, day.conversations.length);
+    for (var d = 0; d < dotCount; d++) {
+      dots += '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#4ade80;margin-right:2px"></span>';
+    }
+    if (day.conversations.length > 3) {
+      dots += '<span style="font-size:9px;color:#6b7280">+' + (day.conversations.length - 3) + '</span>';
+    }
+
+    // Gap indicator
+    var gapIcon = isGap ? '<span style="font-size:13px;color:#d97706;position:absolute;bottom:6px;left:6px" title="No warmup activity">⊕</span>' : '';
+
+    // Sent badge
+    var sentBadge = day.emails_sent > 0
+      ? '<span style="position:absolute;bottom:5px;right:5px;font-size:9px;font-weight:700;color:#4ade80;background:#052e16;border:1px solid #166534;padding:1px 5px;border-radius:999px">' + day.emails_sent + '</span>'
+      : '';
+
+    cells +=
+      '<div data-date="' + day.date + '" ' +
+           'data-sent="' + day.emails_sent + '" ' +
+           'data-received="' + day.emails_received + '" ' +
+           'data-convs="' + day.conversations.length + '" ' +
+           'onclick="selectDay(\'' + day.date + '\')" ' +
+           'onmouseover="showCalTooltip(event,this)" ' +
+           'onmouseout="hideCalTooltip()" ' +
+           'style="position:relative;min-height:90px;background:' + bg + ';border:' + border + ';padding:7px;cursor:pointer;transition:background .15s">' +
+        '<div style="font-size:13px;font-weight:700;color:' + (day.is_today ? '#818cf8' : (day.is_weekend ? '#4b5563' : '#9ca3af')) + '">' + parseInt(day.date.split('-')[2]) + '</div>' +
+        '<div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:1px;align-items:center">' + dots + '</div>' +
+        gapIcon +
+        sentBadge +
+      '</div>';
+  });
+
+  // Trailing empty cells to complete the last row
+  var totalCells = firstDOW + data.days.length;
+  var remainder  = totalCells % 7;
+  if (remainder > 0) {
+    for (var j = remainder; j < 7; j++) {
+      cells += '<div style="min-height:90px;background:#0a0f14;border-right:1px solid #1f2937;border-bottom:1px solid #1f2937"></div>';
+    }
+  }
+
+  grid.innerHTML = cells;
+}
+
+function navigateCalendar(direction) {
+  calendarState.currentMonth += direction;
+  if (calendarState.currentMonth > 12) { calendarState.currentMonth = 1;  calendarState.currentYear++; }
+  if (calendarState.currentMonth < 1)  { calendarState.currentMonth = 12; calendarState.currentYear--; }
+  calendarState.selectedDay  = null;
+  calendarState.dayPanelOpen = false;
+  var panel = el('cal-day-panel');
+  if (panel) panel.style.display = 'none';
+  loadWarmupCalendar();
+}
+
+function navigateCalendarToday() {
+  var now = new Date();
+  calendarState.currentMonth = now.getMonth() + 1;
+  calendarState.currentYear  = now.getFullYear();
+  calendarState.selectedDay  = null;
+  calendarState.dayPanelOpen = false;
+  var panel = el('cal-day-panel');
+  if (panel) panel.style.display = 'none';
+  loadWarmupCalendar();
+}
+
+async function selectDay(dateStr) {
+  calendarState.selectedDay  = dateStr;
+  calendarState.dayPanelOpen = true;
+
+  // Update panel header immediately
+  var panel    = el('cal-day-panel');
+  var dateEl   = el('cal-panel-date');
+  var content  = el('cal-panel-content');
+  if (panel) panel.style.display = 'block';
+  if (dateEl) {
+    var d = new Date(dateStr + 'T00:00:00');
+    dateEl.textContent = d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  }
+  if (content) content.innerHTML = '<div style="text-align:center;color:#6b7280;padding:20px"><span class="spinner"></span></div>';
+
+  // Re-render grid to reflect selection border
+  if (calendarState.calendarData) renderCalendar(calendarState.calendarData);
+
+  try {
+    var data = await api('/warmup/calendar/day/' + dateStr);
+    renderDayPanel(data, dateStr);
+  } catch(e) {
+    if (content) content.innerHTML = '<div style="color:#ef4444">' + e.message + '</div>';
+  }
+}
+
+function renderDayPanel(data, dateStr) {
+  var content = el('cal-panel-content');
+  if (!content) return;
+
+  var html = '';
+
+  // Conversations section
+  html += '<div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Conversations (' + data.conversations.length + ')</div>';
+
+  if (data.conversations.length) {
+    html += data.conversations.map(function(f) {
+      var statusColor = f.status === 'scheduled' ? '#4ade80' : (f.status === 'sent' ? '#818cf8' : '#6b7280');
+      return '<div style="background:#0f1923;border:1px solid #1f2937;border-radius:6px;padding:10px;margin-bottom:8px">' +
+        (f.topic ? '<span style="font-size:10px;font-weight:700;color:#a5b4fc;background:#1e1b4b;border:1px solid #3730a3;padding:2px 7px;border-radius:999px;display:inline-block;margin-bottom:5px">' + escHtml(f.topic) + '</span>' : '') +
+        '<div style="font-size:11px;color:#9ca3af">' + escHtml(f.filename) + '</div>' +
+        '<div style="display:flex;gap:10px;margin-top:5px;font-size:11px">' +
+          '<span style="color:#6b7280">' + f.email_count + ' emails</span>' +
+          '<span style="color:' + statusColor + '">' + f.status + '</span>' +
+          (f.source ? '<span style="color:#374151">' + f.source + '</span>' : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+  } else {
+    html += '<div style="color:#6b7280;font-size:12px;margin-bottom:12px">No conversations scheduled.</div>';
+  }
+
+  // Activity section
+  html += '<div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin:12px 0 8px">Activity</div>';
+
+  if (data.per_account && data.per_account.length) {
+    html += '<div style="display:flex;gap:8px;margin-bottom:10px">' +
+      '<div style="flex:1;background:#052e16;border:1px solid #166534;border-radius:6px;padding:8px;text-align:center">' +
+        '<div style="font-size:18px;font-weight:800;color:#4ade80">' + data.total_sent + '</div>' +
+        '<div style="font-size:10px;color:#6b7280">Sent</div>' +
+      '</div>' +
+      '<div style="flex:1;background:#1e1b4b;border:1px solid #3730a3;border-radius:6px;padding:8px;text-align:center">' +
+        '<div style="font-size:18px;font-weight:800;color:#a5b4fc">' + data.total_received + '</div>' +
+        '<div style="font-size:10px;color:#6b7280">Received</div>' +
+      '</div>' +
+    '</div>';
+
+    html += data.per_account.map(function(a) {
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid #1f2937;font-size:11px">' +
+        '<span style="color:#9ca3af;font-family:monospace">' + escHtml(a.email) + '</span>' +
+        '<span style="color:#4ade80">' + a.sent + '↑ <span style="color:#818cf8">' + a.received + '↓</span></span>' +
+      '</div>';
+    }).join('');
+  } else {
+    // Empty state — offer generate button
+    html += '<div style="text-align:center;padding:16px;color:#6b7280;font-size:12px">' +
+      'No warmup activity on this day.<br>' +
+      '<button class="btn btn-ghost btn-sm" onclick="navigate(\'conversations\')" style="margin-top:10px;border-color:#4338ca;color:#a5b4fc">Generate a Conversation</button>' +
+    '</div>';
+  }
+
+  content.innerHTML = html;
+}
+
+function closeDayPanel() {
+  calendarState.selectedDay  = null;
+  calendarState.dayPanelOpen = false;
+  var panel = el('cal-day-panel');
+  if (panel) panel.style.display = 'none';
+  if (calendarState.calendarData) renderCalendar(calendarState.calendarData);
+}
+
+function showCalTooltip(event, cell) {
+  var tip = el('cal-tooltip');
+  if (!tip) return;
+  var date     = cell.dataset.date     || '';
+  var sent     = cell.dataset.sent     || '0';
+  var received = cell.dataset.received || '0';
+  var convs    = cell.dataset.convs    || '0';
+
+  var d = new Date(date + 'T00:00:00');
+  var label = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+  tip.innerHTML =
+    '<div style="font-weight:700;margin-bottom:4px">' + label + '</div>' +
+    '<div style="color:#9ca3af">📅 ' + convs + ' conversation' + (convs !== '1' ? 's' : '') + '</div>' +
+    '<div style="color:#4ade80">↑ ' + sent + ' sent</div>' +
+    '<div style="color:#818cf8">↓ ' + received + ' received</div>';
+
+  tip.style.display = 'block';
+  tip.style.left = (event.clientX + 12) + 'px';
+  tip.style.top  = (event.clientY + 12) + 'px';
+}
+
+function hideCalTooltip() {
+  var tip = el('cal-tooltip');
+  if (tip) tip.style.display = 'none';
+}
+
+// ─── Warmup Analytics ────────────────────────────────────────────────────────
+var analyticsCharts = {};
+
+var CHART_PALETTE = [
+  '#818cf8','#4ade80','#f59e0b','#f87171','#38bdf8',
+  '#a78bfa','#34d399','#fb923c','#e879f9','#2dd4bf',
+];
+
+function destroyChart(key) {
+  if (analyticsCharts[key]) {
+    analyticsCharts[key].destroy();
+    delete analyticsCharts[key];
+  }
+}
+
+function chartDefaults() {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { labels: { color: '#9ca3af', font: { size: 11 } } },
+      tooltip: { backgroundColor: '#0f1923', titleColor: '#e5e7eb', bodyColor: '#9ca3af', borderColor: '#374151', borderWidth: 1 },
+    },
+    scales: {
+      x: { ticks: { color: '#6b7280', font: { size: 10 } }, grid: { color: '#1f2937' } },
+      y: { ticks: { color: '#6b7280', font: { size: 10 } }, grid: { color: '#1f2937' } },
+    },
+  };
+}
+
+async function loadWarmupAnalytics() {
+  var days = (el('analytics-days') || {}).value || '14';
+  // Show spinners in canvases while loading
+  ['chart-daily-activity','chart-per-account','chart-topics','chart-hourly','chart-weekly'].forEach(function(id) {
+    destroyChart(id);
+  });
+  var pairsEl = el('analytics-pairs-table');
+  if (pairsEl) pairsEl.innerHTML = '<div class="loading"><span class="spinner"></span></div>';
+
+  try {
+    var data = await api('/warmup/analytics?days=' + days);
+    renderAllCharts(data);
+  } catch(e) {
+    if (pairsEl) pairsEl.innerHTML = '<div style="color:#ef4444">' + e.message + '</div>';
+    toast(e.message, 'error');
+  }
+}
+
+function renderAllCharts(data) {
+  renderDailyActivityChart(data.daily_sends);
+  renderPerAccountChart(data.per_account_stats);
+  renderTopicChart(data.topic_distribution);
+  renderHourlyChart(data.hourly_distribution);
+  renderWeeklyChart(data.weekly_trend);
+  renderPairsTable(data.pair_activity);
+}
+
+function renderDailyActivityChart(dailySends) {
+  destroyChart('chart-daily-activity');
+  var canvas = el('chart-daily-activity');
+  if (!canvas) return;
+
+  var labels  = dailySends.map(function(d) {
+    var parts = d.date.split('-');
+    return parts[1] + '/' + parts[2];
+  });
+  var sent     = dailySends.map(function(d) { return d.sent; });
+  var received = dailySends.map(function(d) { return d.received; });
+
+  var cfg = chartDefaults();
+  analyticsCharts['chart-daily-activity'] = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Sent',
+          data: sent,
+          borderColor: '#818cf8',
+          backgroundColor: 'rgba(129,140,248,0.12)',
+          fill: true,
+          tension: 0.4,
+          pointRadius: 3,
+          pointBackgroundColor: '#818cf8',
+        },
+        {
+          label: 'Received',
+          data: received,
+          borderColor: '#4ade80',
+          backgroundColor: 'rgba(74,222,128,0.06)',
+          fill: false,
+          tension: 0.4,
+          pointRadius: 3,
+          pointBackgroundColor: '#4ade80',
+        },
+      ],
+    },
+    options: cfg,
+  });
+}
+
+function renderPerAccountChart(accounts) {
+  destroyChart('chart-per-account');
+  var canvas = el('chart-per-account');
+  if (!canvas) return;
+
+  var sorted = accounts.slice().sort(function(a, b) { return b.total_sent - a.total_sent; });
+  var labels = sorted.map(function(a) {
+    return a.email.length > 22 ? a.email.slice(0, 22) + '…' : a.email;
+  });
+  var values = sorted.map(function(a) { return a.total_sent; });
+  var colors = sorted.map(function(_, i) {
+    var hue = (i * (360 / Math.max(sorted.length, 1))) % 360;
+    return 'hsl(' + hue + ',65%,55%)';
+  });
+
+  var cfg = chartDefaults();
+  cfg.indexAxis = 'y';
+  cfg.plugins.legend = { display: false };
+  cfg.scales.x.title = { display: false };
+
+  analyticsCharts['chart-per-account'] = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{ label: 'Emails Sent', data: values, backgroundColor: colors, borderRadius: 4 }],
+    },
+    options: cfg,
+  });
+}
+
+function renderTopicChart(topics) {
+  destroyChart('chart-topics');
+  var canvas = el('chart-topics');
+  if (!canvas) return;
+
+  if (!topics || !topics.length) {
+    var ctx = canvas.getContext('2d');
+    if (ctx) { ctx.fillStyle = '#6b7280'; ctx.font = '13px sans-serif'; ctx.fillText('No topic data yet', 40, 120); }
+    return;
+  }
+
+  var labels = topics.map(function(t) {
+    var name = t.topic || 'Unknown';
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  });
+  var values = topics.map(function(t) { return t.count; });
+  var colors = topics.map(function(_, i) { return CHART_PALETTE[i % CHART_PALETTE.length]; });
+
+  analyticsCharts['chart-topics'] = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: labels,
+      datasets: [{ data: values, backgroundColor: colors, borderColor: '#0f1923', borderWidth: 2, hoverOffset: 6 }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#9ca3af', font: { size: 10 }, padding: 10, boxWidth: 12 } },
+        tooltip: {
+          backgroundColor: '#0f1923', titleColor: '#e5e7eb', bodyColor: '#9ca3af', borderColor: '#374151', borderWidth: 1,
+          callbacks: {
+            label: function(ctx) {
+              var total = ctx.dataset.data.reduce(function(a, b) { return a + b; }, 0);
+              var pct   = total > 0 ? Math.round((ctx.parsed / total) * 100) : 0;
+              return ' ' + ctx.label + ': ' + ctx.parsed + ' (' + pct + '%)';
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+function renderHourlyChart(hourly) {
+  destroyChart('chart-hourly');
+  var canvas = el('chart-hourly');
+  if (!canvas) return;
+
+  var labels = hourly.map(function(h) {
+    if (h.hour === 0)  return '12am';
+    if (h.hour === 12) return '12pm';
+    return h.hour < 12 ? h.hour + 'am' : (h.hour - 12) + 'pm';
+  });
+  var values = hourly.map(function(h) { return h.count; });
+  var colors = hourly.map(function(h) {
+    return (h.hour >= 8 && h.hour < 18) ? '#818cf8' : '#374151';
+  });
+
+  var cfg = chartDefaults();
+  cfg.plugins.legend = { display: false };
+
+  analyticsCharts['chart-hourly'] = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{ label: 'Emails', data: values, backgroundColor: colors, borderRadius: 3 }],
+    },
+    options: cfg,
+  });
+}
+
+function renderWeeklyChart(weekly) {
+  destroyChart('chart-weekly');
+  var canvas = el('chart-weekly');
+  if (!canvas) return;
+
+  // Trend arrow
+  var arrowEl = el('weekly-trend-arrow');
+  if (arrowEl && weekly.length >= 2) {
+    var last = weekly[weekly.length - 1].total_sent;
+    var prev = weekly[weekly.length - 2].total_sent;
+    if (last > prev)      { arrowEl.textContent = '↑'; arrowEl.style.color = '#4ade80'; }
+    else if (last < prev) { arrowEl.textContent = '↓'; arrowEl.style.color = '#f87171'; }
+    else                  { arrowEl.textContent = '→'; arrowEl.style.color = '#6b7280'; }
+  }
+
+  var labels = weekly.map(function(w) {
+    if (!w.week_start) return '—';
+    var d = new Date(w.week_start + 'T00:00:00');
+    return 'Wk of ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  });
+  var values = weekly.map(function(w) { return w.total_sent; });
+
+  var cfg = chartDefaults();
+  cfg.plugins.legend = { display: false };
+
+  analyticsCharts['chart-weekly'] = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{ label: 'Emails Sent', data: values, backgroundColor: '#818cf8', borderRadius: 5 }],
+    },
+    options: cfg,
+  });
+}
+
+function renderPairsTable(pairs) {
+  var el2 = el('analytics-pairs-table');
+  if (!el2) return;
+
+  if (!pairs || !pairs.length) {
+    el2.innerHTML = '<div style="color:#6b7280;font-size:13px">No pair activity recorded yet.</div>';
+    return;
+  }
+
+  function relTime(dateStr) {
+    if (!dateStr) return '—';
+    var diff = Date.now() - new Date(dateStr).getTime();
+    var mins  = Math.floor(diff / 60000);
+    var hours = Math.floor(mins / 60);
+    var days  = Math.floor(hours / 24);
+    if (days > 0)  return days  + ' day'  + (days  !== 1 ? 's' : '') + ' ago';
+    if (hours > 0) return hours + ' hour' + (hours !== 1 ? 's' : '') + ' ago';
+    if (mins  > 0) return mins  + ' min'  + (mins  !== 1 ? 's' : '') + ' ago';
+    return 'Just now';
+  }
+
+  function trunc(s, n) { return s && s.length > n ? s.slice(0, n) + '…' : (s || '—'); }
+
+  el2.innerHTML = '<table class="data-table"><thead><tr>' +
+    '<th>#</th><th>Sender</th><th>Receiver</th><th>Times Paired</th><th>Last Active</th>' +
+    '</tr></thead><tbody>' +
+    pairs.map(function(p, i) {
+      return '<tr>' +
+        '<td style="color:#6b7280;font-size:12px">' + (i + 1) + '</td>' +
+        '<td style="font-family:monospace;font-size:12px">' + trunc(p.sender_email, 28) + '</td>' +
+        '<td style="font-family:monospace;font-size:12px">' + trunc(p.receiver_email, 28) + '</td>' +
+        '<td style="font-weight:700;color:#818cf8">' + p.pair_count + '</td>' +
+        '<td style="color:#6b7280;font-size:12px">' + relTime(p.last_paired_at) + '</td>' +
+      '</tr>';
+    }).join('') +
+    '</tbody></table>';
+}
+
+function changeDays() {
+  loadWarmupAnalytics();
+}
+
+// ─── Reply Queue ──────────────────────────────────────────────────────────────
+var replyQueueData = [];
+
+function showWarmupLogTab() {
+  el('tab-content-log').style.display   = 'block';
+  el('tab-content-queue').style.display = 'none';
+  el('tab-warmup-log').style.color      = '#818cf8';
+  el('tab-warmup-log').style.borderBottomColor = '#818cf8';
+  el('tab-reply-queue').style.color     = '#6b7280';
+  el('tab-reply-queue').style.borderBottomColor = 'transparent';
+}
+
+function showReplyQueueTab() {
+  el('tab-content-log').style.display   = 'none';
+  el('tab-content-queue').style.display = 'block';
+  el('tab-reply-queue').style.color     = '#818cf8';
+  el('tab-reply-queue').style.borderBottomColor = '#818cf8';
+  el('tab-warmup-log').style.color      = '#6b7280';
+  el('tab-warmup-log').style.borderBottomColor  = 'transparent';
+  loadReplyQueue();
+}
+
+function replyQueueStatusBadge(status) {
+  var map = {
+    pending: { label: 'Pending', color: '#f59e0b', bg: '#1a1200' },
+    sent:    { label: 'Sent',    color: '#4ade80', bg: '#052e16' },
+    failed:  { label: 'Failed',  color: '#f87171', bg: '#1c0000' },
+    skipped: { label: 'Skipped', color: '#6b7280', bg: '#1f2937' },
+  };
+  var m = map[status] || { label: status, color: '#9ca3af', bg: '#1f2937' };
+  return '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;background:' + m.bg + ';color:' + m.color + ';border:1px solid ' + m.color + '44">' + m.label + '</span>';
+}
+
+function threadLevelBadge(level) {
+  var colors = ['#818cf8','#4ade80','#f59e0b','#f87171'];
+  var c = colors[(level - 1) % colors.length];
+  return '<span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;background:' + c + '22;color:' + c + ';border:1px solid ' + c + '44">L' + level + '</span>';
+}
+
+function toEasternTime(isoStr) {
+  if (!isoStr) return '—';
+  try {
+    var d = new Date(isoStr);
+    return d.toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
+  } catch(e) { return isoStr; }
+}
+
+async function loadReplyQueue() {
+  var tableEl = el('reply-queue-table');
+  if (tableEl) tableEl.innerHTML = '<div class="loading"><span class="spinner"></span></div>';
+
+  var status = (el('rq-status-filter') || {}).value || '';
+  try {
+    var data = await api('/warmup/reply-queue' + (status ? '?status=' + status : ''));
+    replyQueueData = data;
+
+    // Stats
+    var pending = data.filter(function(r) { return r.status === 'pending'; }).length;
+    var failed  = data.filter(function(r) { return r.status === 'failed';  }).length;
+    var today   = new Date().toISOString().slice(0, 10);
+    var sentToday = data.filter(function(r) { return r.status === 'sent' && r.created_at && r.created_at.slice(0, 10) === today; }).length;
+
+    if (el('rq-stat-pending')) el('rq-stat-pending').textContent = pending;
+    if (el('rq-stat-sent'))    el('rq-stat-sent').textContent    = sentToday;
+    if (el('rq-stat-failed'))  el('rq-stat-failed').textContent  = failed;
+
+    if (!data.length) {
+      if (tableEl) tableEl.innerHTML = '<div style="padding:24px;text-align:center;color:#6b7280">No reply queue entries found.</div>';
+      return;
+    }
+
+    if (tableEl) {
+      tableEl.innerHTML = '<table class="data-table"><thead><tr>' +
+        '<th>Level</th><th>From</th><th>To</th><th>Subject</th><th>Scheduled (ET)</th><th>Status</th>' +
+        '</tr></thead><tbody>' +
+        data.map(function(r) {
+          var subj = (r.subject || '').length > 36 ? r.subject.slice(0, 36) + '…' : (r.subject || '');
+          return '<tr>' +
+            '<td>' + threadLevelBadge(r.thread_level) + '</td>' +
+            '<td style="font-family:monospace;font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (r.from_email || '') + '</td>' +
+            '<td style="font-family:monospace;font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (r.to_email   || '') + '</td>' +
+            '<td style="font-size:12px;color:#9ca3af">' + escHtml(subj) + '</td>' +
+            '<td style="font-size:12px;white-space:nowrap;color:#6b7280">' + toEasternTime(r.scheduled_at) + '</td>' +
+            '<td>' + replyQueueStatusBadge(r.status) + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table>';
+    }
+  } catch(e) {
+    if (tableEl) tableEl.innerHTML = '<div style="padding:24px;color:#ef4444">' + e.message + '</div>';
+  }
+}
+
+async function processQueueNow() {
+  var btn = el('rq-process-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Processing…'; }
+  try {
+    var r = await api('/warmup/reply-queue/process', { method: 'POST' });
+    toast('Processed ' + r.processed + ' reply(ies)', 'success');
+    loadReplyQueue();
+  } catch(e) {
+    toast(e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ Process Queue Now'; }
+  }
+}
+
+async function clearSentQueue() {
+  if (!confirm('Delete all sent reply queue entries? This cannot be undone.')) return;
+  try {
+    var r = await api('/warmup/reply-queue/clear', { method: 'DELETE' });
+    toast('Cleared ' + r.deleted + ' sent entry(ies)', 'success');
+    loadReplyQueue();
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function loadReplyQueueDashboardCard() {
+  var el2 = el('wd-reply-queue-status');
+  if (!el2) return;
+  try {
+    var data = await api('/warmup/reply-queue?status=pending');
+    var pending = data.length;
+    var next = pending > 0 ? data[0] : null;
+
+    if (pending === 0) {
+      el2.innerHTML =
+        '<div style="display:flex;align-items:center;gap:10px">' +
+          '<span style="font-size:20px">✅</span>' +
+          '<div>' +
+            '<div style="font-size:14px;font-weight:700;color:#4ade80">All caught up</div>' +
+            '<div style="font-size:12px;color:#6b7280">No pending replies in queue</div>' +
+          '</div>' +
+        '</div>';
+    } else {
+      el2.innerHTML =
+        '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">' +
+          '<div style="display:flex;align-items:center;gap:10px">' +
+            '<span style="font-size:24px;font-weight:800;color:#f59e0b">' + pending + '</span>' +
+            '<div>' +
+              '<div style="font-size:13px;font-weight:700;color:#e5e7eb">Pending replies</div>' +
+              (next ? '<div style="font-size:11px;color:#6b7280">Next: ' + toEasternTime(next.scheduled_at) + ' ET</div>' : '') +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    }
+  } catch(e) {
+    if (el2) el2.innerHTML = '<div style="color:#6b7280;font-size:12px">Could not load queue status</div>';
+  }
+}
+
+// ─── Inbox Placement Test ─────────────────────────────────────────────────────
+
+var currentTestIds = [];
+
+function placementBadge(placement) {
+  var map = {
+    inbox:      { color: '#4ade80', bg: '#052e16', label: 'Inbox' },
+    spam:       { color: '#f87171', bg: '#2d0a0a', label: 'Spam' },
+    promotions: { color: '#fbbf24', bg: '#2d1a00', label: 'Promotions' },
+    unknown:    { color: '#9ca3af', bg: '#1f2937', label: 'Unknown' },
+  };
+  var s = map[placement] || map.unknown;
+  return '<span style="padding:2px 9px;border-radius:12px;font-size:11px;font-weight:700;background:' + s.bg + ';color:' + s.color + '">' + s.label + '</span>';
+}
+
+function togglePlacementGuide() {
+  var body = el('placement-guide-body');
+  var arrow = el('placement-guide-arrow');
+  if (!body) return;
+  var open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (arrow) arrow.textContent = open ? '▶' : '▼';
+}
+
+async function loadPlacementAccounts() {
+  var tbody = el('placement-accounts-table');
+  if (!tbody) return;
+  try {
+    var rows = await api('/warmup/placement/accounts');
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#6b7280;padding:20px">No test inboxes added yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(function(r) {
+      return '<tr>' +
+        '<td style="padding:8px 12px">' + escHtml(r.email) + '</td>' +
+        '<td style="padding:8px 12px">' + escHtml(r.provider || 'gmail') + '</td>' +
+        '<td style="padding:8px 12px">' + escHtml(r.label || '—') + '</td>' +
+        '<td style="padding:8px 12px">' +
+          '<span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;background:' +
+          (r.active ? '#052e16' : '#1f2937') + ';color:' + (r.active ? '#4ade80' : '#9ca3af') + '">' +
+          (r.active ? 'Active' : 'Inactive') + '</span>' +
+        '</td>' +
+        '<td style="padding:8px 12px">' +
+          '<button onclick="deletePlacementAccount(' + r.id + ')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px">Remove</button>' +
+        '</td>' +
+      '</tr>';
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="5" style="color:#f87171;padding:12px">Error loading accounts: ' + escHtml(e.message) + '</td></tr>';
+  }
+}
+
+async function addPlacementAccount() {
+  var emailVal = (el('pt-email') || {}).value || '';
+  var password = (el('pt-password') || {}).value || '';
+  var provider = (el('pt-provider') || {}).value || 'gmail';
+  var label = (el('pt-label') || {}).value || '';
+  var resultEl = el('pt-add-result');
+
+  if (!emailVal || !password) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:#f87171">Email and password are required.</span>';
+    return;
+  }
+
+  if (resultEl) resultEl.innerHTML = '<span style="color:#9ca3af">Adding…</span>';
+  try {
+    await api('/warmup/placement/accounts', {
+      method: 'POST',
+      body: JSON.stringify({ email: emailVal, app_password: password, provider: provider, label: label })
+    });
+    ['pt-email','pt-password','pt-label'].forEach(function(id) { if (el(id)) el(id).value = ''; });
+    if (resultEl) resultEl.innerHTML = '<span style="color:#4ade80">Test inbox added.</span>';
+    await loadPlacementAccounts();
+  } catch(e) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:#f87171">' + escHtml(e.message) + '</span>';
+  }
+}
+
+async function deletePlacementAccount(id) {
+  if (!confirm('Remove this test inbox?')) return;
+  try {
+    await api('/warmup/placement/accounts/' + id, { method: 'DELETE' });
+    toast('Test inbox removed', 'success');
+    await loadPlacementAccounts();
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function runPlacementTest() {
+  var sendingAccountEl = el('pt-sending-account');
+  var testNameEl = el('pt-test-name');
+  var btn = el('pt-run-btn');
+  var resultEl = el('pt-run-result');
+
+  var accountId = sendingAccountEl ? sendingAccountEl.value : '';
+  var testName = testNameEl ? testNameEl.value.trim() : '';
+
+  if (!accountId) {
+    toast('Please select a sending account', 'error');
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sending test emails…'; }
+  if (resultEl) resultEl.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Sending…</div>';
+
+  try {
+    var result = await api('/warmup/placement/run', {
+      method: 'POST',
+      body: JSON.stringify({ sending_account_id: parseInt(accountId), test_name: testName || 'Placement Test' })
+    });
+
+    currentTestIds = result.test_ids || [];
+
+    var rows = (result.test_emails || []).map(function(email, i) {
+      var testId = currentTestIds[i] || null;
+      return '<tr id="pt-row-' + testId + '">' +
+        '<td style="padding:8px 12px">' + escHtml(email) + '</td>' +
+        '<td style="padding:8px 12px" id="pt-status-' + testId + '">' +
+          '<span style="color:#fbbf24">Awaiting report…</span>' +
+        '</td>' +
+        '<td style="padding:8px 12px" id="pt-actions-' + testId + '">' +
+          '<button onclick="reportPlacement(' + testId + ',\'inbox\')" style="background:#052e16;color:#4ade80;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;margin-right:4px">Inbox</button>' +
+          '<button onclick="reportPlacement(' + testId + ',\'spam\')" style="background:#2d0a0a;color:#f87171;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;margin-right:4px">Spam</button>' +
+          '<button onclick="reportPlacement(' + testId + ',\'promotions\')" style="background:#2d1a00;color:#fbbf24;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;margin-right:4px">Promotions</button>' +
+          '<button onclick="reportPlacement(' + testId + ',\'unknown\')" style="background:#1f2937;color:#9ca3af;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px">Unknown</button>' +
+        '</td>' +
+      '</tr>';
+    }).join('');
+
+    resultEl.innerHTML =
+      '<div style="background:#1a2332;border-radius:10px;padding:16px;margin-top:8px">' +
+        '<div style="font-size:14px;font-weight:700;color:#e5e7eb;margin-bottom:12px">📨 Sent from ' + escHtml(result.sending_account) + ' — mark where each landed:</div>' +
+        '<table style="width:100%;border-collapse:collapse">' +
+          '<thead><tr>' +
+            '<th style="padding:8px 12px;text-align:left;color:#9ca3af;font-size:12px">Test Inbox</th>' +
+            '<th style="padding:8px 12px;text-align:left;color:#9ca3af;font-size:12px">Placement</th>' +
+            '<th style="padding:8px 12px;text-align:left;color:#9ca3af;font-size:12px">Report</th>' +
+          '</tr></thead>' +
+          '<tbody>' + rows + '</tbody>' +
+        '</table>' +
+      '</div>';
+
+  } catch(e) {
+    if (resultEl) resultEl.innerHTML = '<div style="color:#f87171;padding:12px">Error: ' + escHtml(e.message) + '</div>';
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🚀 Run Placement Test'; }
+  }
+}
+
+async function reportPlacement(testId, placement) {
+  var statusEl = el('pt-status-' + testId);
+  var actionsEl = el('pt-actions-' + testId);
+  if (actionsEl) actionsEl.innerHTML = '<span style="color:#6b7280;font-size:12px">Saving…</span>';
+
+  try {
+    await api('/warmup/placement/report', {
+      method: 'POST',
+      body: JSON.stringify({ test_id: testId, placement: placement })
+    });
+
+    if (statusEl) statusEl.innerHTML = placementBadge(placement);
+    if (actionsEl) actionsEl.innerHTML = '<span style="color:#6b7280;font-size:12px">Reported ✓</span>';
+
+    var allDone = currentTestIds.every(function(id) {
+      var act = el('pt-actions-' + id);
+      return act && act.textContent.includes('Reported');
+    });
+
+    if (allDone) {
+      var counts = { inbox: 0, spam: 0, promotions: 0, unknown: 0 };
+      currentTestIds.forEach(function(id) {
+        var st = el('pt-status-' + id);
+        if (!st) return;
+        var txt = (st.textContent || '').toLowerCase();
+        if (txt.includes('inbox')) counts.inbox++;
+        else if (txt.includes('spam')) counts.spam++;
+        else if (txt.includes('promo')) counts.promotions++;
+        else counts.unknown++;
+      });
+      var total = currentTestIds.length;
+      var inboxRate = total ? Math.round(counts.inbox / total * 100) : 0;
+      var rateColor = inboxRate >= 80 ? '#4ade80' : inboxRate >= 50 ? '#fbbf24' : '#f87171';
+      var summaryDiv = document.createElement('div');
+      summaryDiv.style.cssText = 'background:#0f1f30;border-radius:8px;padding:14px;margin-top:12px;display:flex;gap:20px;align-items:center;flex-wrap:wrap';
+      summaryDiv.innerHTML =
+        '<div style="font-size:13px;font-weight:700;color:#e5e7eb">Test Complete</div>' +
+        '<div style="font-size:22px;font-weight:800;color:' + rateColor + '">' + inboxRate + '% Inbox</div>' +
+        '<div style="font-size:12px;color:#9ca3af">' +
+          counts.inbox + ' inbox &nbsp;·&nbsp; ' + counts.spam + ' spam &nbsp;·&nbsp; ' +
+          counts.promotions + ' promotions &nbsp;·&nbsp; ' + counts.unknown + ' unknown' +
+        '</div>';
+      var resultElFinal = el('pt-run-result');
+      if (resultElFinal) resultElFinal.appendChild(summaryDiv);
+      loadPlacementResults();
+    }
+  } catch(e) {
+    if (actionsEl) actionsEl.innerHTML = '<span style="color:#f87171;font-size:12px">' + escHtml(e.message) + '</span>';
+  }
+}
+
+async function loadPlacementResults() {
+  var summaryEl = el('placement-results-summary');
+  var tableEl = el('placement-results-table');
+
+  try {
+    var data = await api('/warmup/placement/results?days=30');
+
+    if (summaryEl) {
+      if (!data.per_account || !data.per_account.length) {
+        summaryEl.innerHTML = '<div style="color:#6b7280;font-size:13px">No results yet. Run a placement test to see data here.</div>';
+      } else {
+        summaryEl.innerHTML = data.per_account.map(function(a) {
+          var rate = a.inbox_rate || 0;
+          var rateColor = rate >= 80 ? '#4ade80' : rate >= 50 ? '#fbbf24' : '#f87171';
+          return '<div style="background:#1a2332;border-radius:10px;padding:14px;min-width:200px;flex:1">' +
+            '<div style="font-size:12px;color:#9ca3af;margin-bottom:4px">' + escHtml(a.sending_account_email) + '</div>' +
+            '<div style="font-size:26px;font-weight:800;color:' + rateColor + '">' + rate + '%</div>' +
+            '<div style="font-size:11px;color:#6b7280">Inbox rate (' + a.total_tests + ' tests)</div>' +
+            '<div style="font-size:11px;color:#9ca3af;margin-top:6px">' +
+              '<span style="color:#4ade80">' + a.inbox_count + ' inbox</span> · ' +
+              '<span style="color:#f87171">' + a.spam_count + ' spam</span> · ' +
+              '<span style="color:#fbbf24">' + a.promotions_count + ' promo</span>' +
+            '</div>' +
+          '</div>';
+        }).join('');
+      }
+    }
+
+    if (tableEl) {
+      if (!data.recent_tests || !data.recent_tests.length) {
+        tableEl.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#6b7280;padding:20px">No tests recorded yet.</td></tr>';
+        return;
+      }
+      tableEl.innerHTML = data.recent_tests.map(function(t) {
+        return '<tr>' +
+          '<td style="padding:8px 12px">' + escHtml(t.test_name || 'Placement Test') + '</td>' +
+          '<td style="padding:8px 12px;font-size:12px;color:#9ca3af">' + escHtml(t.sending_account_email) + '</td>' +
+          '<td style="padding:8px 12px;font-size:12px;color:#9ca3af">' + escHtml(t.test_email) + '</td>' +
+          '<td style="padding:8px 12px">' + placementBadge(t.placement) + '</td>' +
+          '<td style="padding:8px 12px;font-size:12px;color:#6b7280">' + (t.sent_at ? t.sent_at.replace('T', ' ').slice(0, 16) : '—') + '</td>' +
+          '<td style="padding:8px 12px;font-size:12px;color:#9ca3af">' + escHtml(t.notes || '—') + '</td>' +
+        '</tr>';
+      }).join('');
+    }
+  } catch(e) {
+    if (summaryEl) summaryEl.innerHTML = '<div style="color:#f87171;font-size:12px">Error loading results: ' + escHtml(e.message) + '</div>';
+  }
+}
+
+async function loadPlacementSendingAccounts() {
+  var sel = el('pt-sending-account');
+  if (!sel) return;
+  try {
+    var accounts = await api('/accounts');
+    sel.innerHTML = '<option value="">— Select sending account —</option>';
+    (accounts || []).forEach(function(a) {
+      var opt = document.createElement('option');
+      opt.value = a.id;
+      opt.textContent = a.email + (a.domain ? ' (' + a.domain + ')' : '');
+      sel.appendChild(opt);
+    });
+  } catch(e) {
+    sel.innerHTML = '<option value="">Error loading accounts</option>';
+  }
+}
+
+async function loadPlacementTest() {
+  await Promise.all([
+    loadPlacementAccounts(),
+    loadPlacementResults(),
+    loadPlacementSendingAccounts(),
+  ]);
 }

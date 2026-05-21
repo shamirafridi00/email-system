@@ -3,7 +3,7 @@ import { join } from "path";
 
 import { runSequences } from "./modules/sequences";
 import { checkAllAccounts, checkReplies, type ImapAccount } from "./modules/imap";
-import { runWarmupAll, processConversationFile, generateDailyConversations } from "./modules/warmup";
+import { runWarmupAll, processConversationFile, generateDailyConversations, processReplyQueue } from "./modules/warmup";
 import { sendWarmupSummaryEmail } from "./modules/emailReports";
 import { pushToHubspot, getUnpushedReplies } from "./modules/hubspot";
 import { db, resetDailyCounts } from "./database";
@@ -156,6 +156,17 @@ export function startScheduler(): void {
     }
   });
 
+  // Job 8 — reply queue processor, every 15 minutes
+  Bun.cron("*/15 * * * *", async () => {
+    console.log(`[scheduler] reply queue processor firing at ${new Date().toISOString()}`);
+    try {
+      const count = await processReplyQueue();
+      console.log(`[scheduler] reply-queue: processed ${count} reply(ies)`);
+    } catch (err) {
+      console.error("[scheduler] reply-queue error:", err);
+    }
+  });
+
   // Job 7 — daily warmup summary email, 2am UTC = 7am Pakistan Standard Time (PKT = UTC+5)
   Bun.cron("0 2 * * *", async () => {
     const setting = db
@@ -179,6 +190,7 @@ export function startScheduler(): void {
   */5 * * * *      — conversation file scanner (every 5m)
   0 6 * * 1-5      — auto conversation generator (Mon–Fri, 6am UTC / 2am ET)
   0 2 * * *        — daily warmup summary email (2am UTC / 7am PKT)
+  */15 * * * *     — reply queue processor (every 15 min)
 `);
 }
 

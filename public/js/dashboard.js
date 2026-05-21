@@ -73,6 +73,7 @@ async function loadWarmupDashboard() {
 
     el('wd-refresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
     loadDashboardScheduleStatus();
+    loadReplyQueueDashboardCard();
   } catch(e) {
     el('wd-stat-grid').innerHTML = '<div class="loading" style="color:#ef4444">' + e.message + '</div>';
   }

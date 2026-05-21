@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Email System</title>
 <link rel="stylesheet" href="/public/css/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -17,9 +18,15 @@
       <a data-section="warmup-progress">📈 Warmup Progress</a>
       <a data-section="warmup-schedule">📅 Warmup Schedule</a>
       <a data-section="warmup-readiness">✅ Readiness Check</a>
+      <a data-section="warmup-groups">🗂 Account Groups</a>
       <a data-section="warmup-accounts">🔥 Warmup Accounts</a>
       <a data-section="conversations">💬 Conversations</a>
       <a data-section="warmup-log">📋 Warmup Log</a>
+      <a data-section="warmup-history">🕐 Account History</a>
+      <a data-section="warmup-analytics">📉 Analytics</a>
+      <a data-section="warmup-calendar">📆 Calendar</a>
+      <a data-section="warmup-library">📚 Topics Library</a>
+      <a data-section="warmup-placement">📬 Inbox Test</a>
       <a data-section="warmup-manual">📖 Warmup Manual</a>
     </div>
     <div class="nav-divider"></div>
@@ -76,6 +83,13 @@
           <a style="font-size:12px;color:#818cf8;cursor:pointer;text-decoration:none" onclick="navigate('warmup-schedule')">View full schedule →</a>
         </div>
         <div id="wd-schedule-status"><div class="loading"><span class="spinner"></span></div></div>
+      </div>
+      <div class="card" style="margin-top:4px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <h3 style="margin:0">Reply Queue Status</h3>
+          <a style="font-size:12px;color:#818cf8;cursor:pointer;text-decoration:none" onclick="navigate('warmup-log');setTimeout(showReplyQueueTab,100)">View queue →</a>
+        </div>
+        <div id="wd-reply-queue-status"><div class="loading"><span class="spinner"></span></div></div>
       </div>
     </div>
 
@@ -211,6 +225,51 @@
       </div>
     </div>
 
+    <!-- ACCOUNT GROUPS -->
+    <div id="section-warmup-groups" class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Account Groups</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:3px">Organize warmup accounts by client or purpose · Run warmup independently per group</div>
+        </div>
+      </div>
+
+      <!-- Groups Overview -->
+      <div style="margin-bottom:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-size:12px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em">Groups Overview</div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 10px" onclick="collapseAllGroups()">Collapse All</button>
+            <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 10px" onclick="expandAllGroups()">Expand All</button>
+          </div>
+        </div>
+        <div id="groups-cards-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px"></div>
+      </div>
+
+      <!-- Create new group -->
+      <div class="card" style="margin-bottom:20px">
+        <h3 style="margin:0 0 12px">Create New Group</h3>
+        <div style="display:flex;gap:8px">
+          <input id="new-group-name" placeholder="Group name e.g. Client A" style="flex:1;max-width:280px">
+          <button class="btn btn-primary btn-sm" onclick="createGroup()">+ Create Group</button>
+        </div>
+        <div style="font-size:11px;color:#6b7280;margin-top:6px">A group appears in the overview once at least one account is assigned to it.</div>
+      </div>
+
+      <!-- Assign accounts -->
+      <div class="card" style="margin-bottom:20px">
+        <h3 style="margin:0 0 4px">Assign Accounts to Groups</h3>
+        <div style="font-size:12px;color:#6b7280;margin-bottom:14px">Changing the dropdown immediately reassigns the account.</div>
+        <div class="table-wrap" id="groups-assign-table"></div>
+      </div>
+
+      <!-- Group Warmup Controls -->
+      <div>
+        <div style="font-size:12px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Group Warmup Controls</div>
+        <div id="groups-controls" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+    </div>
+
     <!-- WARMUP ACCOUNTS -->
     <div id="section-warmup-accounts" class="section">
       <div class="section-header">
@@ -227,6 +286,49 @@
           <button id="verify-all-btn" class="btn btn-ghost" onclick="verifyAllAccounts()">✓ Verify All</button>
         </div>
       </div>
+      <!-- Bulk Import Card -->
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;gap:16px">
+          <div>
+            <h3 style="margin:0 0 3px">Bulk Import Accounts</h3>
+            <div style="font-size:12px;color:#6b7280">Import multiple warmup accounts at once from a CSV file</div>
+          </div>
+          <button class="btn btn-ghost" style="border-color:#6366f1;color:#6366f1;flex-shrink:0" onclick="downloadImportTemplate()">⬇ Download Template</button>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <div style="flex:1;height:1px;background:#1f2937"></div>
+          <span style="font-size:11px;color:#4b5563;flex-shrink:0">or paste CSV below</span>
+          <div style="flex:1;height:1px;background:#1f2937"></div>
+        </div>
+
+        <textarea id="bulk-import-csv" placeholder="Paste CSV content here. Columns: email, app_password, daily_target, group_name" style="width:100%;height:120px;resize:vertical;background:#0d1117;border:1px solid #1f2937;border-radius:6px;color:#e5e7eb;font-family:monospace;font-size:12px;padding:10px 12px;box-sizing:border-box;outline:none"></textarea>
+        <div style="font-size:11px;color:#4b5563;margin-top:5px;margin-bottom:12px">
+          Required: <span style="color:#9ca3af">email, app_password</span> &nbsp;·&nbsp; Optional: <span style="color:#9ca3af">daily_target</span> (defaults to 5) &nbsp;·&nbsp; <span style="color:#9ca3af">group_name</span> (defaults to default)
+        </div>
+
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary btn-sm" style="background:#4f46e5;border-color:#4f46e5" onclick="bulkImportAccounts()">Import Accounts</button>
+          <button class="btn btn-ghost btn-sm" onclick="clearBulkImport()">Clear</button>
+        </div>
+
+        <!-- Results card (hidden by default) -->
+        <div id="bulk-import-results" style="display:none;margin-top:16px;border-left:3px solid #22c55e;padding-left:14px">
+          <div style="display:flex;gap:20px;margin-bottom:12px">
+            <div>
+              <div id="bulk-imported-count" style="font-size:22px;font-weight:800;color:#22c55e">0</div>
+              <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">Imported</div>
+            </div>
+            <div id="bulk-skipped-stat" style="display:none">
+              <div id="bulk-skipped-count" style="font-size:22px;font-weight:800;color:#f59e0b">0</div>
+              <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">Skipped</div>
+            </div>
+          </div>
+          <div id="bulk-imported-list" style="display:none;background:#052e16;border:1px solid #166534;border-radius:6px;padding:10px 12px;font-size:12px;font-family:monospace;color:#4ade80;margin-bottom:10px;line-height:1.7"></div>
+          <div id="bulk-skipped-table" style="display:none"></div>
+        </div>
+      </div>
+
       <div class="two-col">
         <div>
           <div class="card">
@@ -332,8 +434,12 @@ Replace sender@gmail.com and receiver@gmail.com with two different email address
           </div>
         </div>
         <div class="form-group" style="margin-bottom:10px"><label>Filename</label><input id="conv-filename" placeholder="conversation_1.json"></div>
-        <div class="form-group" style="margin-bottom:14px"><label>JSON Content</label><textarea id="conv-content" rows="8" placeholder='{"emails":[{"from":"a@gmail.com","to":"b@gmail.com","subject":"Hey","body":"Hi there","send_after_minutes":5}]}'></textarea></div>
-        <button class="btn btn-primary" onclick="uploadConversation()">Upload & Schedule</button>
+        <div class="form-group" style="margin-bottom:10px"><label>JSON Content</label><textarea id="conv-content" rows="8" placeholder='{"emails":[{"from":"a@gmail.com","to":"b@gmail.com","subject":"Hey","body":"Hi there","send_after_minutes":5}]}'></textarea></div>
+        <div id="conv-dup-result" style="margin-bottom:10px"></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-ghost" onclick="checkConversationDuplicate()">🔍 Check for Duplicates</button>
+          <button class="btn btn-primary" id="conv-upload-btn" onclick="uploadConversation()">Upload & Schedule</button>
+        </div>
         <div id="conv-result" class="mt-16"></div>
       </div>
 
@@ -353,31 +459,77 @@ Replace sender@gmail.com and receiver@gmail.com with two different email address
         <div class="section-title">Warmup Log</div>
         <span class="text-muted" id="warmup-log-refresh"></span>
       </div>
-      <div class="card">
-        <h3>Warmup Stats Today</h3>
-        <div id="warmup-stats-log"></div>
+
+      <!-- Tabs -->
+      <div style="display:flex;gap:0;margin-bottom:14px;border-bottom:2px solid #1f2937">
+        <button id="tab-warmup-log" onclick="showWarmupLogTab()" style="padding:8px 20px;font-size:13px;font-weight:700;color:#818cf8;background:none;border:none;border-bottom:2px solid #818cf8;margin-bottom:-2px;cursor:pointer">Warmup Log</button>
+        <button id="tab-reply-queue" onclick="showReplyQueueTab()" style="padding:8px 20px;font-size:13px;font-weight:600;color:#6b7280;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;cursor:pointer">Reply Queue</button>
       </div>
-      <div class="card">
-        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-          <div style="display:flex;align-items:center;gap:8px">
-            <label style="font-size:13px;color:#aaa;white-space:nowrap">Conversation:</label>
-            <select id="warmup-log-filter" onchange="renderWarmupLog()" style="min-width:180px;padding:6px 10px;font-size:13px">
-              <option value="">All Conversations</option>
-            </select>
+
+      <!-- Warmup Log tab -->
+      <div id="tab-content-log">
+        <div class="card">
+          <h3>Warmup Stats Today</h3>
+          <div id="warmup-stats-log"></div>
+        </div>
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:8px">
+              <label style="font-size:13px;color:#aaa;white-space:nowrap">Conversation:</label>
+              <select id="warmup-log-filter" onchange="renderWarmupLog()" style="min-width:180px;padding:6px 10px;font-size:13px">
+                <option value="">All Conversations</option>
+              </select>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <label style="font-size:13px;color:#aaa;white-space:nowrap">From:</label>
+              <input type="date" id="warmup-log-from" onchange="renderWarmupLog()" style="padding:6px 10px;font-size:13px">
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <label style="font-size:13px;color:#aaa;white-space:nowrap">To:</label>
+              <input type="date" id="warmup-log-to" onchange="renderWarmupLog()" style="padding:6px 10px;font-size:13px">
+            </div>
+            <button class="btn btn-danger btn-sm" onclick="resetWarmupLog()" style="margin-left:auto">Reset Log</button>
           </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <label style="font-size:13px;color:#aaa;white-space:nowrap">From:</label>
-            <input type="date" id="warmup-log-from" onchange="renderWarmupLog()" style="padding:6px 10px;font-size:13px">
-          </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <label style="font-size:13px;color:#aaa;white-space:nowrap">To:</label>
-            <input type="date" id="warmup-log-to" onchange="renderWarmupLog()" style="padding:6px 10px;font-size:13px">
-          </div>
-          <button class="btn btn-danger btn-sm" onclick="resetWarmupLog()" style="margin-left:auto">Reset Log</button>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden">
+          <div class="table-wrap" id="warmup-log-table"></div>
         </div>
       </div>
-      <div class="card" style="padding:0;overflow:hidden">
-        <div class="table-wrap" id="warmup-log-table"></div>
+
+      <!-- Reply Queue tab -->
+      <div id="tab-content-queue" style="display:none">
+        <!-- Stats row -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px">
+          <div class="card" style="margin:0;text-align:center;padding:12px">
+            <div id="rq-stat-pending" style="font-size:22px;font-weight:800;color:#f59e0b">—</div>
+            <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Pending</div>
+          </div>
+          <div class="card" style="margin:0;text-align:center;padding:12px">
+            <div id="rq-stat-sent" style="font-size:22px;font-weight:800;color:#4ade80">—</div>
+            <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Sent Today</div>
+          </div>
+          <div class="card" style="margin:0;text-align:center;padding:12px">
+            <div id="rq-stat-failed" style="font-size:22px;font-weight:800;color:#f87171">—</div>
+            <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Failed</div>
+          </div>
+        </div>
+        <!-- Controls -->
+        <div class="card" style="margin-bottom:14px;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="processQueueNow()" id="rq-process-btn" style="background:#4338ca;border-color:#4338ca">⚡ Process Queue Now</button>
+          <button class="btn btn-ghost btn-sm" onclick="clearSentQueue()" style="border-color:#ef4444;color:#ef4444">🗑 Clear Sent</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadReplyQueue()">↻ Refresh</button>
+          <select id="rq-status-filter" onchange="loadReplyQueue()" style="margin-left:auto">
+            <option value="">All Statuses</option>
+            <option value="pending">Pending</option>
+            <option value="sent">Sent</option>
+            <option value="failed">Failed</option>
+            <option value="skipped">Skipped</option>
+          </select>
+        </div>
+        <!-- Table -->
+        <div class="card" style="padding:0;overflow:hidden">
+          <div class="table-wrap" id="reply-queue-table"><div class="loading"><span class="spinner"></span></div></div>
+        </div>
       </div>
     </div>
 
@@ -482,6 +634,16 @@ Replace sender@gmail.com and receiver@gmail.com with two different email address
       <div class="card" style="max-width:520px">
         <h3>Notification Settings</h3>
 
+        <!-- System name -->
+        <div class="form-group" style="margin-bottom:16px">
+          <label>System Name</label>
+          <div style="display:flex;gap:8px">
+            <input id="system-name-input" type="text" placeholder="GTM Warmup System" style="flex:1">
+            <button class="btn btn-primary btn-sm" onclick="saveSystemName()">Save Name</button>
+          </div>
+          <div style="font-size:11px;color:#6b7280;margin-top:5px">This name appears as the sender in all system emails.</div>
+        </div>
+
         <!-- Notification email -->
         <div class="form-group" style="margin-bottom:6px">
           <label>Notification Email</label>
@@ -506,12 +668,534 @@ Replace sender@gmail.com and receiver@gmail.com with two different email address
           </div>
         </div>
 
+        <!-- Warmup complete notification row -->
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;padding:14px 0;border-top:1px solid #1f2937;gap:12px">
+          <div>
+            <div style="font-size:13px;font-weight:600;color:#e5e7eb">Warmup Complete Notification</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px">Notify me when an account completes 14-day warmup</div>
+            <div style="font-size:11px;color:#4b5563;margin-top:4px">Sent automatically when days active reaches 14 and readiness score is above 70</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0">
+            <span style="font-size:11px;font-weight:600;padding:2px 10px;border-radius:999px;background:#052e16;color:#4ade80">Always On</span>
+            <button id="test-complete-notif-btn" class="btn btn-ghost" style="border-color:#22c55e;color:#22c55e;font-size:12px;padding:4px 12px" onclick="sendTestCompleteNotification()">Send Test Notification</button>
+          </div>
+        </div>
+        <div id="notif-complete-result" style="font-size:13px;margin-bottom:4px"></div>
+
         <!-- Actions -->
         <div style="display:flex;gap:8px;padding-top:14px;border-top:1px solid #1f2937;flex-wrap:wrap">
           <button class="btn btn-ghost" onclick="sendTestSummary()"><span id="test-summary-spinner"></span> Send Test Summary</button>
           <button class="btn btn-ghost" onclick="previewSummaryEmail()">Preview Email</button>
         </div>
         <div id="notif-action-result" style="margin-top:10px;font-size:13px"></div>
+
+        <!-- Alert Settings divider -->
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid #1f2937">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.8px;color:#6b7280;text-transform:uppercase;margin-bottom:14px">Alert Settings</div>
+
+          <!-- Dashboard URL -->
+          <div class="form-group" style="margin-bottom:6px">
+            <label>Dashboard URL</label>
+            <div style="display:flex;gap:8px">
+              <input id="dashboard-url-input" type="url" placeholder="http://localhost:3000" style="flex:1">
+              <button class="btn btn-primary btn-sm" onclick="saveDashboardUrl()">Save URL</button>
+            </div>
+            <div style="font-size:11px;color:#6b7280;margin-top:5px">Used in failure alert emails as a "Fix This Account" quick-action link.</div>
+          </div>
+
+          <!-- Failure alert row -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-top:1px solid #1f2937;margin-top:14px">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#e5e7eb">Warmup Failure Alerts</div>
+              <div style="font-size:11px;color:#6b7280;margin-top:2px">Triggered after 2 consecutive failures, rate-limited to 1 per 6 hours</div>
+            </div>
+            <span style="font-size:11px;font-weight:600;padding:2px 10px;border-radius:999px;background:#1c0a00;color:#fb923c">Always On</span>
+          </div>
+
+          <!-- Test failure alert -->
+          <div style="display:flex;gap:8px;padding-top:14px;border-top:1px solid #1f2937;flex-wrap:wrap">
+            <button class="btn btn-ghost" style="border-color:#ef4444;color:#ef4444" onclick="sendTestFailureAlert()"><span id="test-alert-spinner"></span> Send Test Failure Alert</button>
+          </div>
+          <div id="notif-alert-result" style="margin-top:10px;font-size:13px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ACCOUNT STATUS HISTORY -->
+    <div id="section-warmup-history" class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Account Status History</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:3px">Complete audit log of every status change across all warmup accounts</div>
+        </div>
+        <button class="btn btn-ghost" onclick="exportHistoryCSV()">⬇ Export CSV</button>
+      </div>
+
+      <!-- Filters -->
+      <div class="card" style="margin-bottom:16px;padding:14px 16px">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+          <div class="form-group" style="margin:0;min-width:180px">
+            <label style="font-size:11px">Account</label>
+            <select id="hist-filter-account" onchange="filterHistory()" style="width:100%">
+              <option value="">All Accounts</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0;min-width:150px">
+            <label style="font-size:11px">Change Type</label>
+            <select id="hist-filter-status" onchange="filterHistory()" style="width:100%">
+              <option value="">All Changes</option>
+              <option value="paused">Paused</option>
+              <option value="warming">Resumed / Active</option>
+              <option value="flagged">Flagged</option>
+              <option value="verified">Verified</option>
+              <option value="created">Created</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label style="font-size:11px">From</label>
+            <input id="hist-filter-from" type="date" onchange="filterHistory()" style="width:130px">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label style="font-size:11px">To</label>
+            <input id="hist-filter-to" type="date" onchange="filterHistory()" style="width:130px">
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="clearHistoryFilters()">Clear Filters</button>
+        </div>
+      </div>
+
+      <!-- Summary stats -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
+        <div class="card" style="margin:0;text-align:center;padding:14px">
+          <div id="hist-stat-total" style="font-size:24px;font-weight:800;color:#e5e7eb">—</div>
+          <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-top:4px">Total Events</div>
+        </div>
+        <div class="card" style="margin:0;text-align:center;padding:14px;background:#1c0000">
+          <div id="hist-stat-flagged" style="font-size:24px;font-weight:800;color:#f87171">—</div>
+          <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-top:4px">Flagged Events</div>
+        </div>
+        <div class="card" style="margin:0;text-align:center;padding:14px">
+          <div id="hist-stat-pauses" style="font-size:24px;font-weight:800;color:#f59e0b">—</div>
+          <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-top:4px">Manual Pauses</div>
+        </div>
+        <div class="card" style="margin:0;text-align:center;padding:14px;background:#052e16">
+          <div id="hist-stat-recoveries" style="font-size:24px;font-weight:800;color:#4ade80">—</div>
+          <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-top:4px">Auto Recoveries</div>
+        </div>
+      </div>
+
+      <!-- History table -->
+      <div class="card" style="padding:0;overflow:hidden">
+        <div class="table-wrap" id="history-table-wrap"></div>
+        <!-- Pagination -->
+        <div id="history-pagination" style="display:none;padding:12px 16px;border-top:1px solid #1f2937;display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <button class="btn btn-ghost btn-sm" id="hist-prev-btn" onclick="historyPrevPage()">← Previous</button>
+          <span id="hist-page-indicator" style="font-size:12px;color:#6b7280"></span>
+          <button class="btn btn-ghost btn-sm" id="hist-next-btn" onclick="historyNextPage()">Next →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Account History Modal -->
+    <div id="account-history-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;overflow-y:auto;padding:40px 20px" onclick="closeAccountHistoryModal(event)">
+      <div style="max-width:640px;margin:0 auto;background:#111;border:1px solid #1f2937;border-radius:10px;overflow:hidden">
+        <div style="padding:18px 24px;border-bottom:1px solid #1f2937;display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div style="font-size:14px;font-weight:700;color:#e5e7eb">Account Status History</div>
+            <div id="acct-hist-email" style="font-size:12px;font-family:monospace;color:#6b7280;margin-top:2px"></div>
+          </div>
+          <button onclick="closeAccountHistoryModal()" style="background:none;border:none;color:#6b7280;font-size:18px;cursor:pointer;padding:4px">✕</button>
+        </div>
+        <div id="acct-hist-content" style="padding:20px 24px;max-height:480px;overflow-y:auto"></div>
+        <div style="padding:14px 24px;border-top:1px solid #1f2937;display:flex;justify-content:space-between;align-items:center">
+          <button id="acct-hist-clear-btn" class="btn btn-ghost btn-sm" style="border-color:#ef4444;color:#ef4444">Clear History</button>
+          <button onclick="closeAccountHistoryModal()" class="btn btn-ghost btn-sm">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- WARMUP ANALYTICS -->
+    <div id="section-warmup-analytics" class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Warmup Analytics</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:3px">Visual performance data for your warmup system</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <select id="analytics-days" onchange="changeDays()" style="width:120px">
+            <option value="7">7 days</option>
+            <option value="14" selected>14 days</option>
+            <option value="30">30 days</option>
+          </select>
+          <button class="btn btn-ghost" onclick="loadWarmupAnalytics()">↻ Refresh</button>
+        </div>
+      </div>
+
+      <!-- Row 1: Daily Activity (full width) -->
+      <div class="card" style="margin-bottom:14px;padding:20px">
+        <h3 style="margin:0 0 16px">Daily Warmup Activity</h3>
+        <div style="position:relative;height:260px">
+          <canvas id="chart-daily-activity"></canvas>
+        </div>
+      </div>
+
+      <!-- Row 2: Per Account + Topic Distribution -->
+      <div class="two-col" style="margin-bottom:14px">
+        <div class="card" style="padding:20px">
+          <h3 style="margin:0 0 16px">Per Account Performance</h3>
+          <div style="position:relative;height:240px">
+            <canvas id="chart-per-account"></canvas>
+          </div>
+        </div>
+        <div class="card" style="padding:20px">
+          <h3 style="margin:0 0 16px">Topic Distribution</h3>
+          <div style="position:relative;height:240px">
+            <canvas id="chart-topics"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 3: Hourly + Weekly -->
+      <div class="two-col" style="margin-bottom:14px">
+        <div class="card" style="padding:20px">
+          <h3 style="margin:0 0 16px">Hourly Activity Pattern</h3>
+          <div style="position:relative;height:220px">
+            <canvas id="chart-hourly"></canvas>
+          </div>
+        </div>
+        <div class="card" style="padding:20px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+            <h3 style="margin:0">Weekly Trend</h3>
+            <span id="weekly-trend-arrow" style="font-size:18px"></span>
+          </div>
+          <div style="position:relative;height:220px">
+            <canvas id="chart-weekly"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 4: Top Pairs table -->
+      <div class="card" style="padding:20px">
+        <h3 style="margin:0 0 14px">Top Account Pairs</h3>
+        <div id="analytics-pairs-table"><div class="loading"><span class="spinner"></span></div></div>
+      </div>
+    </div>
+
+    <!-- WARMUP CALENDAR -->
+    <div id="section-warmup-calendar" class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Warmup Calendar</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:3px">Visual overview of conversation scheduling and warmup activity</div>
+        </div>
+        <button class="btn btn-ghost" onclick="navigateCalendarToday()">Today</button>
+      </div>
+
+      <!-- Month navigation -->
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px">
+        <button class="btn btn-ghost btn-sm" onclick="navigateCalendar(-1)">← Prev</button>
+        <div id="cal-month-label" style="font-size:20px;font-weight:800;color:#e5e7eb;min-width:180px;text-align:center">—</div>
+        <button class="btn btn-ghost btn-sm" onclick="navigateCalendar(1)">Next →</button>
+      </div>
+
+      <!-- Monthly summary stats -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
+        <div class="card" style="margin:0;text-align:center;padding:12px">
+          <div id="cal-stat-convs" style="font-size:22px;font-weight:800;color:#a5b4fc">—</div>
+          <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Scheduled</div>
+        </div>
+        <div class="card" style="margin:0;text-align:center;padding:12px">
+          <div id="cal-stat-sent" style="font-size:22px;font-weight:800;color:#4ade80">—</div>
+          <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Emails Sent</div>
+        </div>
+        <div class="card" style="margin:0;text-align:center;padding:12px">
+          <div id="cal-stat-active" style="font-size:22px;font-weight:800;color:#f59e0b">—</div>
+          <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Days Active</div>
+        </div>
+        <div class="card" style="margin:0;text-align:center;padding:12px">
+          <div id="cal-stat-avg" style="font-size:22px;font-weight:800;color:#818cf8">—</div>
+          <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Daily Avg</div>
+        </div>
+      </div>
+
+      <!-- Calendar + Day panel wrapper -->
+      <div style="display:flex;gap:14px;align-items:flex-start">
+
+        <!-- Calendar grid -->
+        <div style="flex:1;min-width:0">
+          <div class="card" style="padding:0;overflow:hidden">
+            <!-- Day headers -->
+            <div style="display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid #1f2937">
+              <div style="padding:8px 0;text-align:center;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Sun</div>
+              <div style="padding:8px 0;text-align:center;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Mon</div>
+              <div style="padding:8px 0;text-align:center;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Tue</div>
+              <div style="padding:8px 0;text-align:center;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Wed</div>
+              <div style="padding:8px 0;text-align:center;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Thu</div>
+              <div style="padding:8px 0;text-align:center;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Fri</div>
+              <div style="padding:8px 0;text-align:center;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Sat</div>
+            </div>
+            <!-- Day cells -->
+            <div id="cal-grid" style="display:grid;grid-template-columns:repeat(7,1fr)"></div>
+          </div>
+        </div>
+
+        <!-- Day detail panel (hidden by default) -->
+        <div id="cal-day-panel" style="display:none;width:30%;min-width:260px;max-width:340px;flex-shrink:0">
+          <div class="card" style="padding:0;overflow:hidden;position:sticky;top:16px">
+            <div style="padding:14px 16px;border-bottom:1px solid #1f2937;display:flex;align-items:center;justify-content:space-between">
+              <div id="cal-panel-date" style="font-size:14px;font-weight:700;color:#e5e7eb"></div>
+              <button onclick="closeDayPanel()" style="background:none;border:none;color:#6b7280;font-size:16px;cursor:pointer">✕</button>
+            </div>
+            <div id="cal-panel-content" style="padding:16px;max-height:520px;overflow-y:auto"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Tooltip (absolutely positioned, hidden by default) -->
+      <div id="cal-tooltip" style="display:none;position:fixed;z-index:999;background:#0f1923;border:1px solid #374151;border-radius:6px;padding:8px 12px;font-size:12px;color:#e5e7eb;pointer-events:none;box-shadow:0 4px 12px rgba(0,0,0,.5)"></div>
+    </div>
+
+    <!-- TOPICS LIBRARY -->
+    <div id="section-warmup-library" class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Conversation Topics Library</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:3px">Manage the built-in conversation templates used for auto-generating warmup emails</div>
+        </div>
+        <button class="btn btn-primary" onclick="showAddTopicForm()" style="background:#4338ca;border-color:#4338ca">+ Add New Topic</button>
+      </div>
+
+      <!-- Controls row -->
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <input id="lib-search" type="text" placeholder="Search topics by name…" oninput="filterTopicsBySearch()" style="flex:1;max-width:320px">
+        <span id="lib-count-badge" style="font-size:12px;color:#6b7280;background:#1f2937;border:1px solid #374151;padding:3px 10px;border-radius:999px">— topics</span>
+      </div>
+
+      <!-- Add New Topic form (hidden by default) -->
+      <div id="add-topic-form-card" class="card" style="display:none;margin-bottom:16px">
+        <h3 style="margin-top:0;color:#a5b4fc">Add New Topic</h3>
+        <div class="two-col" style="gap:12px">
+          <div class="form-group">
+            <label>Topic Name</label>
+            <input id="new-topic-name" type="text" placeholder="e.g. Project Kickoff or Invoice Follow Up">
+          </div>
+          <div class="form-group">
+            <label>Subject Line</label>
+            <input id="new-topic-subject" type="text" placeholder="e.g. Kicking Off the Redesign Project">
+          </div>
+        </div>
+        <div class="two-col" style="gap:12px">
+          <div class="form-group">
+            <label>Sender Message</label>
+            <textarea id="new-topic-sender" rows="5" placeholder="Write what the sender says in the first email…"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Receiver Reply</label>
+            <textarea id="new-topic-receiver" rows="5" placeholder="Write how the receiver replies…"></textarea>
+          </div>
+        </div>
+        <!-- Writing tips collapsible -->
+        <div style="margin-bottom:14px">
+          <button class="btn btn-ghost btn-sm" onclick="toggleLibTips()" id="lib-tips-toggle" style="font-size:11px;color:#6b7280;padding:4px 8px">▶ Writing Tips</button>
+          <div id="lib-tips-body" style="display:none;margin-top:8px;padding:10px 14px;background:#0f1923;border:1px solid #1f2937;border-radius:6px;font-size:12px;color:#9ca3af;line-height:1.7">
+            <ul style="margin:0;padding-left:18px">
+              <li>Keep messages under 100 words</li>
+              <li>Sound like a real professional, not a template</li>
+              <li>Avoid generic phrases like "hope this email finds you well"</li>
+              <li>Use specific details related to the web design industry</li>
+            </ul>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-primary" onclick="saveTopic()" style="background:#4338ca;border-color:#4338ca">Save Topic</button>
+          <button class="btn btn-ghost" onclick="hideAddTopicForm()">Cancel</button>
+        </div>
+        <div id="add-topic-result" style="margin-top:10px;font-size:13px"></div>
+      </div>
+
+      <!-- Topics grid -->
+      <div id="topics-library-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px">
+        <div class="card" style="padding:32px;text-align:center;color:#6b7280"><span class="spinner"></span> Loading topics…</div>
+      </div>
+    </div>
+
+    <!-- Topic Preview Modal -->
+    <div id="topic-preview-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;overflow-y:auto;padding:40px 20px" onclick="closeTopicPreviewModal(event)">
+      <div style="max-width:680px;margin:0 auto;background:#111;border:1px solid #1f2937;border-radius:10px;overflow:hidden">
+        <div style="padding:18px 24px;border-bottom:1px solid #1f2937;display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div style="font-size:14px;font-weight:700;color:#e5e7eb">Conversation Preview</div>
+            <div id="preview-modal-topic" style="font-size:12px;color:#6b7280;margin-top:2px"></div>
+          </div>
+          <button onclick="closeTopicPreviewModal()" style="background:none;border:none;color:#6b7280;font-size:18px;cursor:pointer;padding:4px">✕</button>
+        </div>
+        <div id="preview-modal-content" style="padding:20px 24px;max-height:520px;overflow-y:auto"></div>
+      </div>
+    </div>
+
+    <!-- INBOX PLACEMENT TEST -->
+    <div id="section-warmup-placement" class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Inbox Placement Test</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:3px">Test whether your warmup emails land in inbox, spam, or promotions</div>
+        </div>
+      </div>
+
+      <!-- How It Works -->
+      <div class="card" style="margin-bottom:14px;border-color:#2d3748">
+        <h3 style="margin:0 0 16px;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">How It Works</h3>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px">
+          <div style="background:#0f1f30;border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:28px;height:28px;border-radius:50%;background:#4338ca;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">1</div>
+              <div style="font-size:13px;font-weight:700;color:#e5e7eb">Add Test Inboxes</div>
+            </div>
+            <div style="font-size:12px;color:#9ca3af;line-height:1.6">Add personal Gmail or Outlook accounts you control — these act as "seed" inboxes that receive your test emails. You need at least one. More test inboxes = more accurate results.</div>
+            <div style="font-size:11px;color:#6b7280;padding:8px 10px;background:#1a2332;border-radius:6px;line-height:1.5">💡 Use accounts across different providers (Gmail + Outlook) to get a full picture of deliverability across email clients.</div>
+          </div>
+          <div style="background:#0f1f30;border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:28px;height:28px;border-radius:50%;background:#4338ca;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">2</div>
+              <div style="font-size:13px;font-weight:700;color:#e5e7eb">Run the Test</div>
+            </div>
+            <div style="font-size:12px;color:#9ca3af;line-height:1.6">Select one of your campaign sending accounts and click Run. The system sends a realistic warmup-style email from that account to every active test inbox simultaneously.</div>
+            <div style="font-size:11px;color:#6b7280;padding:8px 10px;background:#1a2332;border-radius:6px;line-height:1.5">💡 Give each test a descriptive name (e.g. "Week 2 check") so you can track how deliverability improves over time in the Historical Results.</div>
+          </div>
+          <div style="background:#0f1f30;border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:28px;height:28px;border-radius:50%;background:#4338ca;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">3</div>
+              <div style="font-size:13px;font-weight:700;color:#e5e7eb">Report Where It Landed</div>
+            </div>
+            <div style="font-size:12px;color:#9ca3af;line-height:1.6">Open each test inbox and find the email. Click the matching button — <strong style="color:#4ade80">Inbox</strong>, <strong style="color:#f87171">Spam</strong>, <strong style="color:#fbbf24">Promotions</strong>, or <strong style="color:#9ca3af">Unknown</strong>. Once all inboxes are reported your inbox rate is calculated.</div>
+            <div style="font-size:11px;color:#6b7280;padding:8px 10px;background:#1a2332;border-radius:6px;line-height:1.5">💡 Check the inbox within 5–10 minutes of running the test. Some providers delay spam classification briefly.</div>
+          </div>
+        </div>
+
+        <!-- What affects placement -->
+        <div style="border-top:1px solid #1f2937;padding-top:16px">
+          <div style="font-size:12px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">What affects inbox placement</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+            <div style="padding:10px 12px;background:#1a2332;border-radius:8px">
+              <div style="font-size:12px;font-weight:700;color:#818cf8;margin-bottom:4px">🔐 Authentication</div>
+              <div style="font-size:11px;color:#9ca3af;line-height:1.5">SPF, DKIM, and DMARC records must be correctly configured on your domain. Missing records are the #1 cause of spam placement.</div>
+            </div>
+            <div style="padding:10px 12px;background:#1a2332;border-radius:8px">
+              <div style="font-size:12px;font-weight:700;color:#4ade80;margin-bottom:4px">📈 Warmup Age</div>
+              <div style="font-size:11px;color:#9ca3af;line-height:1.5">New accounts with no sending history are untrusted. The warmup process builds that reputation gradually over 2–4 weeks.</div>
+            </div>
+            <div style="padding:10px 12px;background:#1a2332;border-radius:8px">
+              <div style="font-size:12px;font-weight:700;color:#f59e0b;margin-bottom:4px">📦 Sending Volume</div>
+              <div style="font-size:11px;color:#9ca3af;line-height:1.5">Sudden volume spikes look suspicious. Keep daily sends within your account's current warmup limit until your score is strong.</div>
+            </div>
+            <div style="padding:10px 12px;background:#1a2332;border-radius:8px">
+              <div style="font-size:12px;font-weight:700;color:#f87171;margin-bottom:4px">🚩 Spam Signals</div>
+              <div style="font-size:11px;color:#9ca3af;line-height:1.5">Spammy subject lines, link-heavy bodies, unsubscribe link absence, and sending to invalid addresses all hurt placement.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- When to run -->
+        <div style="border-top:1px solid #1f2937;padding-top:14px;margin-top:14px;display:flex;align-items:flex-start;gap:12px">
+          <span style="font-size:18px;flex-shrink:0">🗓️</span>
+          <div>
+            <div style="font-size:12px;font-weight:700;color:#e5e7eb;margin-bottom:4px">When to run placement tests</div>
+            <div style="font-size:12px;color:#9ca3af;line-height:1.6">Run at the end of <strong style="color:#e5e7eb">Week 1</strong> (baseline), end of <strong style="color:#e5e7eb">Week 2</strong> (expect improvement), and again before launching any real campaign. If inbox rate drops between tests, pause campaigns and check your DNS records and bounce rates before proceeding.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 1: Test Inbox Accounts -->
+      <div class="card" style="margin-bottom:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <h3 style="margin:0">Test Inboxes</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadPlacementAccounts()">↻ Refresh</button>
+        </div>
+        <div id="placement-accounts-table"><div class="loading"><span class="spinner"></span></div></div>
+
+        <!-- Add form -->
+        <div style="margin-top:16px;padding-top:16px;border-top:1px solid #1f2937">
+          <div style="font-size:12px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Add Test Inbox</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 120px 1fr;gap:10px;align-items:end">
+            <div class="form-group" style="margin:0">
+              <label style="font-size:11px">Email</label>
+              <input id="pt-email" type="email" placeholder="personal@gmail.com">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label style="font-size:11px">App Password</label>
+              <input id="pt-password" type="password" placeholder="16-char app password">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label style="font-size:11px">Provider</label>
+              <select id="pt-provider">
+                <option value="gmail">Gmail</option>
+                <option value="outlook">Outlook</option>
+                <option value="yahoo">Yahoo</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0">
+              <label style="font-size:11px">Label (optional)</label>
+              <input id="pt-label" placeholder="e.g. Personal Gmail">
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="addPlacementAccount()" style="margin-top:10px;background:#4338ca;border-color:#4338ca">Add Inbox</button>
+          <div id="pt-add-result" style="margin-top:8px;font-size:12px"></div>
+        </div>
+      </div>
+
+      <!-- Section 2: Run Placement Test -->
+      <div class="card" style="margin-bottom:14px">
+        <h3 style="margin:0 0 14px">Run Test</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+          <div class="form-group" style="margin:0">
+            <label style="font-size:11px">Sending Account</label>
+            <select id="pt-sending-account"><option value="">Loading accounts…</option></select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label style="font-size:11px">Test Name</label>
+            <input id="pt-test-name" placeholder="Placement Test — May 20 2026">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="pt-run-btn" onclick="runPlacementTest()" style="background:#4338ca;border-color:#4338ca">📬 Run Placement Test</button>
+        <div id="pt-run-result" style="margin-top:14px"></div>
+      </div>
+
+      <!-- Section 3: Historical Results -->
+      <div class="card" style="margin-bottom:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <h3 style="margin:0">Historical Results</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadPlacementResults()">↻ Refresh</button>
+        </div>
+        <div id="placement-results-summary"></div>
+        <div id="placement-results-table" style="margin-top:14px"></div>
+      </div>
+
+      <!-- Section 4: Interpretation Guide (collapsible) -->
+      <div class="card">
+        <button onclick="togglePlacementGuide()" style="width:100%;background:none;border:none;text-align:left;cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:0">
+          <h3 style="margin:0;font-size:13px">📖 Interpretation Guide</h3>
+          <span id="placement-guide-arrow" style="color:#6b7280;font-size:12px">▶ Show</span>
+        </button>
+        <div id="placement-guide-body" style="display:none;margin-top:14px">
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 14px;background:#052e16;border:1px solid #166534;border-radius:6px">
+              <span style="font-size:18px;flex-shrink:0">✅</span>
+              <div><div style="font-size:13px;font-weight:700;color:#4ade80">Above 90% inbox rate</div><div style="font-size:12px;color:#86efac;margin-top:2px">Excellent deliverability — ready for real campaigns</div></div>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 14px;background:#1e1b4b;border:1px solid #3730a3;border-radius:6px">
+              <span style="font-size:18px;flex-shrink:0">👍</span>
+              <div><div style="font-size:13px;font-weight:700;color:#818cf8">70–90% inbox rate</div><div style="font-size:12px;color:#a5b4fc;margin-top:2px">Good but room for improvement — continue warming up</div></div>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 14px;background:#1a1200;border:1px solid #78350f;border-radius:6px">
+              <span style="font-size:18px;flex-shrink:0">⚠️</span>
+              <div><div style="font-size:13px;font-weight:700;color:#f59e0b">50–70% inbox rate</div><div style="font-size:12px;color:#fcd34d;margin-top:2px">Concerning — check DNS records (SPF, DKIM, DMARC) and warmup volume</div></div>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 14px;background:#1c0000;border:1px solid #7f1d1d;border-radius:6px">
+              <span style="font-size:18px;flex-shrink:0">🚫</span>
+              <div><div style="font-size:13px;font-weight:700;color:#f87171">Below 50% inbox rate</div><div style="font-size:12px;color:#fca5a5;margin-top:2px">Serious deliverability issues — do not send real campaigns yet</div></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -654,12 +1338,68 @@ Replace sender@gmail.com and receiver@gmail.com with two different email address
                 <div style="flex:1;padding:11px 16px;font-size:13px;color:#aaa;border-left:1px solid #2a2a2a"><strong style="color:#ddd">Start your real campaigns.</strong> Continue warmup in parallel at a maintenance volume of 5 emails per account per day to keep the reputation signal active.</div>
               </div>
             </div>
+            <div style="margin-top:14px;background:#052e16;border:1px solid #166534;border-radius:8px;padding:14px 16px;display:flex;gap:12px;align-items:flex-start">
+              <span style="font-size:18px;flex-shrink:0">✅</span>
+              <p style="margin:0;font-size:13px;line-height:1.7;color:#86efac">When an account reaches day 14 with a health score above 70, you will receive an automatic <strong>Warmup Complete</strong> notification email. This email confirms the account is ready and provides recommended next steps for launching your first campaign.</p>
+            </div>
             <p style="margin:12px 0 0 0;font-size:12px;line-height:1.6;color:#555">Note: Domains with poor SPF / DKIM / DMARC records may need a longer warmup period. Set up DNS authentication records before starting warmup for best results.</p>
           </div>
 
           <div style="height:1px;background:#222"></div>
 
           <!-- Section 6 -->
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <div style="width:32px;height:32px;border-radius:8px;background:#7f1d1d;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">🚨</div>
+              <h2 style="margin:0;font-size:15px;font-weight:700;color:#fff">Failure Alerts</h2>
+            </div>
+            <p style="margin:0 0 12px 0;font-size:13px;line-height:1.75;color:#aaa">The system automatically monitors authentication health during every warmup cycle and verification attempt. When something goes wrong, you are notified immediately so you can fix it before it affects your sending reputation.</p>
+            <div style="background:#111;border:1px solid #2a2a2a;border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px;margin-bottom:12px">
+              <div style="display:flex;gap:10px">
+                <span style="color:#ef4444;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Trigger:</strong> A failure alert email is sent after an account experiences <strong style="color:#ddd">2 or more consecutive authentication failures</strong> — whether during a scheduled warmup cycle or a manual account verification.</p>
+              </div>
+              <div style="display:flex;gap:10px">
+                <span style="color:#ef4444;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Rate limiting:</strong> At most one alert is sent per account per 6-hour window, so you won't be spammed if an account fails repeatedly in a short period.</p>
+              </div>
+              <div style="display:flex;gap:10px">
+                <span style="color:#ef4444;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Quick Action button:</strong> The alert email contains a "Fix This Account Now" button that links directly to your dashboard. Set your Dashboard URL in Settings → Notification Settings → Alert Settings.</p>
+              </div>
+            </div>
+            <p style="margin:0 0 10px 0;font-size:13px;font-weight:600;color:#e5e7eb">How to fix a failing account:</p>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;gap:12px;align-items:flex-start">
+                <div style="width:22px;height:22px;border-radius:50%;background:#7f1d1d;color:#fca5a5;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">1</div>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa">Go to <strong style="color:#ddd">Warmup Accounts</strong> and find the flagged account.</p>
+              </div>
+              <div style="display:flex;gap:12px;align-items:flex-start">
+                <div style="width:22px;height:22px;border-radius:50%;background:#7f1d1d;color:#fca5a5;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">2</div>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa">Go to <strong style="color:#ddd">Google Account → Security → 2-Step Verification → App passwords</strong> and generate a fresh app password for that Gmail account.</p>
+              </div>
+              <div style="display:flex;gap:12px;align-items:flex-start">
+                <div style="width:22px;height:22px;border-radius:50%;background:#7f1d1d;color:#fca5a5;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">3</div>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa">Edit the account in the dashboard and <strong style="color:#ddd">paste the new app password</strong>.</p>
+              </div>
+              <div style="display:flex;gap:12px;align-items:flex-start">
+                <div style="width:22px;height:22px;border-radius:50%;background:#7f1d1d;color:#fca5a5;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">4</div>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa">Click <strong style="color:#ddd">Verify</strong> on the account to confirm the new credentials work. A successful verify resets the failure counter to zero and removes the Flagged status.</p>
+              </div>
+              <div style="display:flex;gap:12px;align-items:flex-start">
+                <div style="width:22px;height:22px;border-radius:50%;background:#7f1d1d;color:#fca5a5;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">5</div>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa">If the account still fails, check that <strong style="color:#ddd">2-Step Verification is enabled</strong> on the Google account — app passwords require it.</p>
+              </div>
+              <div style="display:flex;gap:12px;align-items:flex-start">
+                <div style="width:22px;height:22px;border-radius:50%;background:#7f1d1d;color:#fca5a5;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">6</div>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa">As a last resort, <strong style="color:#ddd">pause the account</strong> using the Active toggle to exclude it from warmup cycles while you investigate, without losing its history.</p>
+              </div>
+            </div>
+          </div>
+
+          <div style="height:1px;background:#222"></div>
+
+          <!-- Section 7 -->
           <div>
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
               <div style="width:32px;height:32px;border-radius:8px;background:#1a0a00;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">📋</div>

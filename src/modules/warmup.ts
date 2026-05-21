@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import { readFileSync } from "fs";
 import { db } from "../database";
 import { randomBusinessDelay, isUSBusinessHours, getNextUSBusinessStart } from "../utils/timezone";
+import { sendFailureAlert, sendWarmupCompleteNotification } from "./emailReports";
 
 interface WarmupAccount {
   id: number;
@@ -142,7 +143,7 @@ export function processConversationFile(filePath: string): void {
   }
 }
 
-export async function runWarmupAll(accountSubset?: WarmupAccount[]): Promise<void> {
+export async function runWarmupAll(accountSubset?: WarmupAccount[], groupName?: string): Promise<void> {
   const setting = db
     .query<{ value: string }, []>(
       "SELECT value FROM system_settings WHERE key = 'warmup_running'"
@@ -154,11 +155,22 @@ export async function runWarmupAll(accountSubset?: WarmupAccount[]): Promise<voi
     return;
   }
 
-  const accounts = accountSubset ?? db
-    .query<WarmupAccount, []>(
-      "SELECT * FROM warmup_accounts WHERE active = 1"
-    )
-    .all();
+  let accounts: WarmupAccount[];
+  if (accountSubset) {
+    accounts = accountSubset;
+  } else if (groupName) {
+    accounts = db
+      .query<WarmupAccount, [string]>(
+        "SELECT * FROM warmup_accounts WHERE active = 1 AND group_name = ?"
+      )
+      .all(groupName);
+  } else {
+    accounts = db
+      .query<WarmupAccount, []>(
+        "SELECT * FROM warmup_accounts WHERE active = 1"
+      )
+      .all();
+  }
 
   if (accounts.length < 2) {
     console.log("Need at least 2 active warmup accounts to run warmup.");
@@ -252,6 +264,29 @@ export async function runWarmupAll(accountSubset?: WarmupAccount[]): Promise<voi
         [sender.id]
       );
 
+      // Check if sender just completed 14-day warmup for the first time
+      {
+        const senderFull = db
+          .query<{ warmup_started_at: string | null; health_score: number; status: string }, [number]>(
+            "SELECT warmup_started_at, health_score, status FROM warmup_accounts WHERE id = ?"
+          )
+          .get(sender.id);
+        if (senderFull?.warmup_started_at) {
+          const daysActive = Math.floor((Date.now() - new Date(senderFull.warmup_started_at).getTime()) / 86_400_000);
+          const sentKey = `warmup_complete_sent_${sender.email}`;
+          const alreadySent = db.query<{ value: string }, []>(`SELECT value FROM system_settings WHERE key = '${sentKey}'`).get();
+          if (daysActive >= 14 && !alreadySent) {
+            const totalSent = db.query<{ count: number }, [string]>("SELECT COUNT(*) as count FROM warmup_log WHERE from_email = ?").get(sender.email)?.count ?? 0;
+            const grade = senderFull.health_score >= 80 ? "Excellent" : senderFull.health_score >= 60 ? "Good" : senderFull.health_score >= 40 ? "Fair" : senderFull.health_score >= 20 ? "Poor" : "Critical";
+            try {
+              await sendWarmupCompleteNotification({ email: sender.email, days_active: daysActive, emails_sent_total: totalSent, health_score: senderFull.health_score, health_grade: grade });
+            } catch (completeErr) {
+              console.error(`[warmup] sendWarmupCompleteNotification failed for ${sender.email}:`, completeErr);
+            }
+          }
+        }
+      }
+
       // Update warmup_pairs table
       const existingPair = db
         .query<{ id: number }, [string, string]>(
@@ -272,67 +307,18 @@ export async function runWarmupAll(accountSubset?: WarmupAccount[]): Promise<voi
 
       console.log(`Warmup sent: ${sender.email} → ${receiver.email} | ${subject}`);
 
-      // Auto-reply: receiver → sender with weighted human-like delay
-      const replyDelayMs = randomBusinessDelay();
-      await new Promise((r) => setTimeout(r, replyDelayMs));
+      // Schedule reply chain into warmup_reply_queue (no setTimeout)
+      const initialLogId = (db.query<{ id: number }, [string, string]>(
+        "SELECT id FROM warmup_log WHERE from_email = ? AND to_email = ? ORDER BY sent_at DESC LIMIT 1"
+      ).get(sender.email, receiver.email))?.id ?? 0;
 
-      const replyBody = randomItem(REPLY_BODIES);
-      const replySubject = `Re: ${subject}`;
-      const receiverTransport = buildTransport(
-        receiver.email,
-        receiver.app_password
-      );
-
-      await receiverTransport.sendMail({
-        from: receiver.email,
-        to: sender.email,
-        subject: replySubject,
-        text: replyBody,
+      scheduleReplyChain({
+        conversationId: `auto_${pairId}_${Date.now()}`,
+        initialSubject: subject,
+        senderEmail:    sender.email,
+        receiverEmail:  receiver.email,
+        parentLogId:    initialLogId,
       });
-
-      const replyPairId = `${receiver.email}:${sender.email}`;
-      db.run(
-        "INSERT INTO warmup_log (from_email, to_email, subject, replied, conversation_id, pair_id) VALUES (?, ?, ?, 1, 'auto', ?)",
-        [receiver.email, sender.email, replySubject, replyPairId]
-      );
-
-      // Set warmup_started_at for receiver if needed
-      const receiverRecord = db
-        .query<{ warmup_started_at: string | null }, [number]>(
-          "SELECT warmup_started_at FROM warmup_accounts WHERE id = ?"
-        )
-        .get(receiver.id);
-      if (!receiverRecord?.warmup_started_at) {
-        db.run("UPDATE warmup_accounts SET warmup_started_at = CURRENT_TIMESTAMP WHERE id = ?", [receiver.id]);
-      }
-
-      // Reset consecutive failures for receiver on success
-      db.run(
-        "UPDATE warmup_accounts SET consecutive_failures = 0 WHERE id = ?",
-        [receiver.id]
-      );
-
-      // Update warmup_pairs for reply direction
-      const existingReplyPair = db
-        .query<{ id: number }, [string, string]>(
-          "SELECT id FROM warmup_pairs WHERE sender_email = ? AND receiver_email = ?"
-        )
-        .get(receiver.email, sender.email);
-      if (existingReplyPair) {
-        db.run(
-          "UPDATE warmup_pairs SET last_paired_at = CURRENT_TIMESTAMP, pair_count = pair_count + 1 WHERE id = ?",
-          [existingReplyPair.id]
-        );
-      } else {
-        db.run(
-          "INSERT INTO warmup_pairs (sender_email, receiver_email) VALUES (?, ?)",
-          [receiver.email, sender.email]
-        );
-      }
-
-      console.log(
-        `Warmup reply: ${receiver.email} → ${sender.email} | ${replySubject}`
-      );
     } catch (err) {
       console.error(
         `Warmup cycle failed (${sender.email} → ${receiver.email}):`,
@@ -343,8 +329,216 @@ export async function runWarmupAll(accountSubset?: WarmupAccount[]): Promise<voi
         "UPDATE warmup_accounts SET consecutive_failures = consecutive_failures + 1, last_failure_at = CURRENT_TIMESTAMP WHERE id = ?",
         [sender.id]
       );
+      const updatedFailures = db
+        .query<{ consecutive_failures: number }, [number]>(
+          "SELECT consecutive_failures FROM warmup_accounts WHERE id = ?"
+        )
+        .get(sender.id)?.consecutive_failures ?? 0;
+      if (updatedFailures >= 3) {
+        db.run(
+          "INSERT INTO account_status_history (account_id, account_email, previous_status, new_status, reason) VALUES (?, ?, 'warming', 'flagged', ?)",
+          [sender.id, sender.email, `Authentication failure ${updatedFailures} during warmup cycle — account flagged`]
+        );
+      } else {
+        db.run(
+          "INSERT INTO account_status_history (account_id, account_email, previous_status, new_status, reason) VALUES (?, ?, 'warming', 'warming', ?)",
+          [sender.id, sender.email, `Authentication failure ${updatedFailures} during warmup cycle`]
+        );
+      }
+      if (updatedFailures >= 2) {
+        try {
+          await sendFailureAlert({
+            email: sender.email,
+            consecutive_failures: updatedFailures,
+            last_failure_at: new Date().toISOString(),
+            error_message: err instanceof Error ? err.message : String(err),
+          });
+        } catch (alertErr) {
+          console.error(`[warmup] sendFailureAlert failed for ${sender.email}:`, alertErr);
+        }
+      }
     }
   }
+}
+
+// ─── Reply queue helpers ──────────────────────────────────────────────────────
+
+const THREAD_CLOSERS = [
+  "Sounds good, talk soon.",
+  "Perfect, I'll get that to you by end of week.",
+  "Great, thanks for the quick reply.",
+  "Noted, I'll follow up once I have an update.",
+];
+
+const THREAD_SHORT = [
+  "Got it, thanks.",
+  "Will do.",
+  "Perfect.",
+  "Understood, thanks.",
+];
+
+function scheduleTime(from: Date, delayMs: number): Date {
+  const proposed = new Date(from.getTime() + delayMs);
+  if (isUSBusinessHours(proposed)) return proposed;
+  // Move to next business day 8am ET + random 0–45 min
+  const next = getNextUSBusinessStart(proposed);
+  next.setTime(next.getTime() + Math.floor(Math.random() * 45 * 60_000));
+  return next;
+}
+
+function scheduleReplyChain(opts: {
+  conversationId: string;
+  initialSubject: string;
+  senderEmail: string;    // original sender (sends level 2, 4)
+  receiverEmail: string;  // original receiver (sends level 1, 3)
+  parentLogId: number;
+}): void {
+  const now = new Date();
+
+  // Level 1: receiver → sender
+  const t1 = scheduleTime(now, randomBusinessDelay());
+  const s1 = `Re: ${opts.initialSubject}`;
+  const b1 = randomItem(REPLY_BODIES);
+  db.run(
+    `INSERT INTO warmup_reply_queue (conversation_id, thread_level, from_email, to_email, subject, body, scheduled_at, status, parent_log_id)
+     VALUES (?, 1, ?, ?, ?, ?, ?, 'pending', ?)`,
+    [opts.conversationId, opts.receiverEmail, opts.senderEmail, s1, b1, t1.toISOString(), opts.parentLogId]
+  );
+
+  // Level 2: sender → receiver
+  const t2 = scheduleTime(t1, randomBusinessDelay());
+  const s2 = `Re: Re: ${opts.initialSubject}`;
+  const b2 = randomItem(BODIES);
+  db.run(
+    `INSERT INTO warmup_reply_queue (conversation_id, thread_level, from_email, to_email, subject, body, scheduled_at, status, parent_log_id)
+     VALUES (?, 2, ?, ?, ?, ?, ?, 'pending', ?)`,
+    [opts.conversationId, opts.senderEmail, opts.receiverEmail, s2, b2, t2.toISOString(), opts.parentLogId]
+  );
+
+  // Level 3: 40% chance — receiver → sender
+  if (Math.random() < 0.4) {
+    const t3 = scheduleTime(t2, randomBusinessDelay());
+    const s3 = `Re: Re: Re: ${opts.initialSubject}`;
+    const b3 = randomItem(THREAD_CLOSERS);
+    db.run(
+      `INSERT INTO warmup_reply_queue (conversation_id, thread_level, from_email, to_email, subject, body, scheduled_at, status, parent_log_id)
+       VALUES (?, 3, ?, ?, ?, ?, ?, 'pending', ?)`,
+      [opts.conversationId, opts.receiverEmail, opts.senderEmail, s3, b3, t3.toISOString(), opts.parentLogId]
+    );
+
+    // Level 4: 20% of all conversations (50% of those that got level 3)
+    if (Math.random() < 0.5) {
+      const t4 = scheduleTime(t3, randomBusinessDelay());
+      const s4 = `Re: Re: Re: Re: ${opts.initialSubject}`;
+      const b4 = randomItem(THREAD_SHORT);
+      db.run(
+        `INSERT INTO warmup_reply_queue (conversation_id, thread_level, from_email, to_email, subject, body, scheduled_at, status, parent_log_id)
+         VALUES (?, 4, ?, ?, ?, ?, ?, 'pending', ?)`,
+        [opts.conversationId, opts.senderEmail, opts.receiverEmail, s4, b4, t4.toISOString(), opts.parentLogId]
+      );
+    }
+  }
+
+  console.log(`[warmup] queued reply chain for conversation ${opts.conversationId}`);
+}
+
+export async function processReplyQueue(): Promise<number> {
+  const now = new Date().toISOString();
+
+  const due = db.query<{
+    id: number; conversation_id: string; thread_level: number;
+    from_email: string; to_email: string; subject: string; body: string;
+    scheduled_at: string; parent_log_id: number;
+  }, [string]>(
+    `SELECT id, conversation_id, thread_level, from_email, to_email, subject, body, scheduled_at, parent_log_id
+     FROM warmup_reply_queue
+     WHERE status = 'pending' AND scheduled_at <= ?
+     ORDER BY scheduled_at ASC
+     LIMIT 10`
+  ).all(now);
+
+  console.log(`[reply-queue] Processing reply queue — found ${due.length} due replies at ${now}`);
+
+  let processed = 0;
+  let failed    = 0;
+
+  for (const row of due) {
+    const acct = db.query<{ email: string; app_password: string }, [string]>(
+      "SELECT email, app_password FROM warmup_accounts WHERE email = ? AND active = 1"
+    ).get(row.from_email);
+
+    if (!acct) {
+      db.run("UPDATE warmup_reply_queue SET status = 'skipped' WHERE id = ?", [row.id]);
+      console.warn(`[reply-queue] account not found/inactive: ${row.from_email} — skipped`);
+      continue;
+    }
+
+    console.log(`[reply-queue] Attempting reply level ${row.thread_level} from ${acct.email} to ${row.to_email}`);
+
+    try {
+      const transport = buildTransport(acct.email, acct.app_password);
+      await transport.sendMail({
+        from:    acct.email,
+        to:      row.to_email,
+        subject: row.subject,
+        text:    row.body,
+      });
+
+      db.run("UPDATE warmup_reply_queue SET status = 'sent' WHERE id = ?", [row.id]);
+
+      const pairId = `${acct.email}:${row.to_email}`;
+      db.run(
+        "INSERT INTO warmup_log (from_email, to_email, subject, replied, conversation_id, pair_id) VALUES (?, ?, ?, 1, ?, ?)",
+        [acct.email, row.to_email, row.subject, row.conversation_id, pairId]
+      );
+
+      // Update warmup_pairs
+      const existingPair = db.query<{ id: number }, [string, string]>(
+        "SELECT id FROM warmup_pairs WHERE sender_email = ? AND receiver_email = ?"
+      ).get(acct.email, row.to_email);
+      if (existingPair) {
+        db.run(
+          "UPDATE warmup_pairs SET last_paired_at = CURRENT_TIMESTAMP, pair_count = pair_count + 1 WHERE id = ?",
+          [existingPair.id]
+        );
+      } else {
+        db.run("INSERT INTO warmup_pairs (sender_email, receiver_email) VALUES (?, ?)", [acct.email, row.to_email]);
+      }
+
+      // Reset consecutive failures
+      db.run("UPDATE warmup_accounts SET consecutive_failures = 0 WHERE email = ?", [acct.email]);
+
+      console.log(`[reply-queue] Reply sent successfully — L${row.thread_level}: ${acct.email} → ${row.to_email} | ${row.subject}`);
+      processed++;
+    } catch (err) {
+      db.run("UPDATE warmup_reply_queue SET status = 'failed' WHERE id = ?", [row.id]);
+      db.run(
+        "UPDATE warmup_accounts SET consecutive_failures = consecutive_failures + 1, last_failure_at = CURRENT_TIMESTAMP WHERE email = ?",
+        [acct.email]
+      );
+      console.error(`[reply-queue] Reply failed — L${row.thread_level}: ${acct.email} → ${row.to_email} | Error: ${err instanceof Error ? err.message : String(err)}`);
+      failed++;
+    }
+  }
+
+  console.log(`[reply-queue] Queue processing complete — sent ${processed} failed ${failed}`);
+
+  // Reschedule missed sends (pending but scheduled_at > 4 hours ago)
+  const fourHoursAgo = new Date(Date.now() - 4 * 3_600_000).toISOString();
+  const missedRows = db.query<{ id: number }, [string]>(
+    "SELECT id FROM warmup_reply_queue WHERE status = 'pending' AND scheduled_at < ?"
+  ).all(fourHoursAgo);
+
+  if (missedRows.length > 0) {
+    const nextWindow = getNextUSBusinessStart();
+    for (const m of missedRows) {
+      const rescheduled = new Date(nextWindow.getTime() + Math.floor(Math.random() * 30 * 60_000));
+      db.run("UPDATE warmup_reply_queue SET scheduled_at = ? WHERE id = ?", [rescheduled.toISOString(), m.id]);
+    }
+    console.log(`[reply-queue] rescheduled ${missedRows.length} missed reply(ies) to next business window`);
+  }
+
+  return processed;
 }
 
 export interface GeneratedConversation {
