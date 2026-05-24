@@ -13,6 +13,66 @@ async function loadNotificationSettings() {
 
   await loadSystemName();
   await loadDashboardUrl();
+  await loadReplyNotificationSetting();
+}
+
+async function loadReplyNotificationSetting() {
+  try {
+    var res = await api('/dashboard/settings/reply-notifications');
+    updateReplyNotifToggle(res.enabled);
+  } catch(e) {}
+}
+
+function updateReplyNotifToggle(enabled) {
+  var btn   = el('notif-reply-toggle');
+  var knob  = el('notif-reply-knob');
+  var badge = el('notif-reply-badge');
+  if (!btn) return;
+  if (enabled) {
+    btn.style.background = '#22c55e';
+    knob.style.left = '23px';
+    if (badge) { badge.textContent = 'Enabled'; badge.style.background = '#052e16'; badge.style.color = '#22c55e'; }
+  } else {
+    btn.style.background = '#374151';
+    knob.style.left = '3px';
+    if (badge) { badge.textContent = 'Disabled'; badge.style.background = '#1f2937'; badge.style.color = '#6b7280'; }
+  }
+  btn.dataset.enabled = enabled ? '1' : '0';
+}
+
+async function toggleReplyNotification() {
+  var btn = el('notif-reply-toggle');
+  var currentlyEnabled = btn && btn.dataset.enabled === '1';
+  var newEnabled = !currentlyEnabled;
+  try {
+    await api('/dashboard/settings/reply-notifications', { method: 'POST', body: JSON.stringify({ enabled: newEnabled }) });
+    updateReplyNotifToggle(newEnabled);
+    toast('Reply notifications ' + (newEnabled ? 'enabled' : 'disabled'), 'success');
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function sendTestReplyNotification() {
+  var btn = el('test-reply-notif-btn');
+  var resultEl = el('notif-reply-result');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  if (resultEl) resultEl.innerHTML = '';
+  try {
+    var r = await api('/dashboard/settings/test-reply-notification', { method: 'POST' });
+    if (r.success) {
+      toast('Test reply notification sent to your notification email', 'success');
+      if (resultEl) resultEl.innerHTML = '<span style="color:#22c55e">✓ ' + r.message + '</span>';
+    } else {
+      toast(r.message || 'Failed', 'error');
+      if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">' + (r.message || 'Failed') + '</span>';
+    }
+  } catch(e) {
+    toast(e.message || 'Failed to send test notification', 'error');
+    if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">' + (e.message || 'Failed') + '</span>';
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Send Test Reply Notification'; }
+  }
 }
 
 async function loadSystemName() {

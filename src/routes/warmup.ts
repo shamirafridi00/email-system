@@ -11,6 +11,13 @@ const app = new Hono();
 
 const CONVERSATIONS_DIR = join(import.meta.dir, "../../conversations");
 
+function getCurrentClientId(): number {
+  const row = db.query<{ value: string }, []>(
+    "SELECT value FROM system_settings WHERE key = 'current_client_id'"
+  ).get();
+  return row ? Number(row.value) : 1;
+}
+
 // ─── Duplicate Detection ──────────────────────────────────────────────────────
 
 interface ConvEmail { from?: string; to?: string; subject?: string; body?: string; send_after_minutes?: number; }
@@ -135,20 +142,35 @@ app.post("/conversations/check-duplicate", async (c) => {
 });
 
 app.get("/accounts", (c) => {
-  const rows = db
-    .query<
-      { id: number; email: string; daily_volume: number; active: number; last_active: string | null; consecutive_failures: number; last_verified_at: string | null },
-      []
-    >(
-      `SELECT wa.id, wa.email, wa.daily_volume, wa.active,
-              wa.consecutive_failures, wa.last_verified_at,
-              MAX(wl.sent_at) AS last_active
-       FROM warmup_accounts wa
-       LEFT JOIN warmup_log wl ON wl.from_email = wa.email
-       GROUP BY wa.id
-       ORDER BY wa.id ASC`
-    )
-    .all();
+  const showAll = c.req.query("show_all") === "true";
+  const explicitClientId = c.req.query("client_id");
+
+  let clientId: number | null = null;
+  if (!showAll) {
+    if (explicitClientId) {
+      clientId = Number(explicitClientId);
+    } else {
+      const setting = db.query<{ value: string }, []>(
+        "SELECT value FROM system_settings WHERE key = 'current_client_id'"
+      ).get();
+      if (setting) clientId = Number(setting.value);
+    }
+  }
+
+  const baseQuery = `SELECT wa.id, wa.email, wa.daily_volume, wa.active,
+          wa.consecutive_failures, wa.last_verified_at,
+          MAX(wl.sent_at) AS last_active
+   FROM warmup_accounts wa
+   LEFT JOIN warmup_log wl ON wl.from_email = wa.email`;
+
+  const rows = clientId !== null
+    ? db.query<Record<string, unknown>, [number]>(
+        `${baseQuery} WHERE wa.client_id = ? GROUP BY wa.id ORDER BY wa.id ASC`
+      ).all(clientId)
+    : db.query<Record<string, unknown>, []>(
+        `${baseQuery} GROUP BY wa.id ORDER BY wa.id ASC`
+      ).all();
+
   return c.json(rows);
 });
 
@@ -217,9 +239,10 @@ app.post("/accounts/bulk-import", async (c) => {
       continue;
     }
 
+    const bulkClientId = getCurrentClientId();
     db.run(
-      "INSERT INTO warmup_accounts (email, app_password, daily_volume, group_name, status, consecutive_failures) VALUES (?, ?, ?, ?, 'warming', 0)",
-      [email, appPass, dailyTarget, groupName]
+      "INSERT INTO warmup_accounts (email, app_password, daily_volume, group_name, status, consecutive_failures, client_id) VALUES (?, ?, ?, ?, 'warming', 0, ?)",
+      [email, appPass, dailyTarget, groupName, bulkClientId]
     );
 
     // Seed default schedule plan for this new account
@@ -243,29 +266,30 @@ app.post("/accounts/bulk-import", async (c) => {
 
 app.get("/accounts/groups", (c) => {
   const today = new Date().toISOString().split("T")[0];
+  const clientId = getCurrentClientId();
   const groups = db
-    .query<{ group_name: string | null }, []>(
-      "SELECT DISTINCT COALESCE(group_name, 'default') as group_name FROM warmup_accounts ORDER BY group_name ASC"
+    .query<{ group_name: string | null }, [number]>(
+      "SELECT DISTINCT COALESCE(group_name, 'default') as group_name FROM warmup_accounts WHERE client_id = ? OR client_id IS NULL ORDER BY group_name ASC"
     )
-    .all();
+    .all(clientId);
 
   const result = groups.map((g) => {
     const gName = g.group_name ?? "default";
     const counts = db
-      .query<{ account_count: number; active_count: number; avg_health_score: number }, [string]>(
+      .query<{ account_count: number; active_count: number; avg_health_score: number }, [string, number]>(
         `SELECT COUNT(*) as account_count,
                 SUM(CASE WHEN active = 1 THEN 1 ELSE 0 END) as active_count,
                 AVG(COALESCE(health_score, 0)) as avg_health_score
-         FROM warmup_accounts WHERE COALESCE(group_name, 'default') = ?`
+         FROM warmup_accounts WHERE COALESCE(group_name, 'default') = ? AND (client_id = ? OR client_id IS NULL)`
       )
-      .get(gName);
+      .get(gName, clientId);
     const sentToday = db
-      .query<{ count: number }, [string, string]>(
+      .query<{ count: number }, [string, string, number]>(
         `SELECT COUNT(*) as count FROM warmup_log wl
          JOIN warmup_accounts wa ON wa.email = wl.from_email
-         WHERE COALESCE(wa.group_name, 'default') = ? AND DATE(wl.sent_at) = ?`
+         WHERE COALESCE(wa.group_name, 'default') = ? AND DATE(wl.sent_at) = ? AND (wa.client_id = ? OR wa.client_id IS NULL)`
       )
-      .get(gName, today)?.count ?? 0;
+      .get(gName, today, clientId)?.count ?? 0;
     return {
       group_name: gName,
       account_count: counts?.account_count ?? 0,
@@ -300,7 +324,14 @@ app.post("/accounts/groups/run", async (c) => {
   const body = await c.req.json<{ group_name: string }>();
   const groupName = (body.group_name ?? "").trim();
   if (!groupName) return c.json({ error: "group_name is required" }, 400);
-  await runWarmupAll(undefined, groupName);
+  const clientId = getCurrentClientId();
+  // Only run accounts for current client in this group
+  const groupAccounts = db
+    .query<{ id: number; email: string; app_password: string; daily_volume: number; active: number }, [string, number]>(
+      "SELECT id, email, app_password, daily_volume, active FROM warmup_accounts WHERE COALESCE(group_name, 'default') = ? AND (client_id = ? OR client_id IS NULL) AND active = 1"
+    )
+    .all(groupName, clientId);
+  await runWarmupAll(groupAccounts.length > 0 ? groupAccounts : undefined, groupName);
   return c.json({ success: true, message: `Warmup run triggered for group "${groupName}"` });
 });
 
@@ -338,9 +369,10 @@ app.post("/accounts", async (c) => {
     return c.json({ error: "email and app_password are required" }, 400);
   }
 
+  const clientId = getCurrentClientId();
   const result = db.run(
-    "INSERT INTO warmup_accounts (email, app_password, daily_volume) VALUES (?, ?, ?)",
-    [body.email, body.app_password, body.daily_volume ?? 5]
+    "INSERT INTO warmup_accounts (email, app_password, daily_volume, client_id) VALUES (?, ?, ?, ?)",
+    [body.email, body.app_password, body.daily_volume ?? 5, clientId]
   );
 
   const newId = result.lastInsertRowid;
@@ -355,6 +387,7 @@ app.post("/accounts", async (c) => {
 app.get("/accounts/progress", (c) => {
   const today = new Date().toISOString().split("T")[0];
 
+  const clientId = getCurrentClientId();
   const accounts = db
     .query<
       {
@@ -366,12 +399,12 @@ app.get("/accounts/progress", (c) => {
         consecutive_failures: number;
         status: string;
       },
-      []
+      [number]
     >(
       `SELECT id, email, warmup_started_at, warmup_target_days, daily_target, consecutive_failures, status
-       FROM warmup_accounts ORDER BY id ASC`
+       FROM warmup_accounts WHERE client_id = ? OR client_id IS NULL ORDER BY id ASC`
     )
-    .all();
+    .all(clientId);
 
   const results = accounts.map((acct) => {
     let warmupStartedAt = acct.warmup_started_at;
@@ -809,9 +842,10 @@ async function runReadinessCheckForAccount(id: number): Promise<ReadinessResult 
 }
 
 app.get("/accounts/readiness-all", async (c) => {
+  const clientId = getCurrentClientId();
   const accounts = db
-    .query<{ id: number }, []>("SELECT id FROM warmup_accounts WHERE active = 1 ORDER BY id ASC")
-    .all();
+    .query<{ id: number }, [number]>("SELECT id FROM warmup_accounts WHERE active = 1 AND (client_id = ? OR client_id IS NULL) ORDER BY id ASC")
+    .all(clientId);
 
   const results: ReadinessResult[] = [];
   for (const acct of accounts) {
@@ -823,9 +857,10 @@ app.get("/accounts/readiness-all", async (c) => {
 });
 
 app.post("/accounts/verify-all", async (c) => {
+  const clientId = getCurrentClientId();
   const accounts = db
-    .query<{ id: number }, []>("SELECT id FROM warmup_accounts WHERE active = 1 ORDER BY id ASC")
-    .all();
+    .query<{ id: number }, [number]>("SELECT id FROM warmup_accounts WHERE active = 1 AND (client_id = ? OR client_id IS NULL) ORDER BY id ASC")
+    .all(clientId);
 
   const results: Awaited<ReturnType<typeof verifyAccount>>[] = [];
   for (const acct of accounts) {
@@ -1097,12 +1132,13 @@ app.get("/conversations", (c) => {
 
 app.get("/schedule/summary", (c) => {
   const today = new Date().toISOString().split("T")[0];
+  const clientId = getCurrentClientId();
 
   const accounts = db
-    .query<{ id: number; email: string; warmup_started_at: string | null }, []>(
-      "SELECT id, email, warmup_started_at FROM warmup_accounts WHERE active = 1"
+    .query<{ id: number; email: string; warmup_started_at: string | null }, [number]>(
+      "SELECT id, email, warmup_started_at FROM warmup_accounts WHERE active = 1 AND (client_id = ? OR client_id IS NULL)"
     )
-    .all();
+    .all(clientId);
 
   const weekCounts: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
   let onTrack = 0;
@@ -1156,12 +1192,13 @@ app.get("/schedule", (c) => {
   const weekStart = new Date();
   weekStart.setDate(weekStart.getDate() - weekStart.getDay());
   const weekStartStr = weekStart.toISOString().split("T")[0];
+  const clientId = getCurrentClientId();
 
   const accounts = db
-    .query<{ id: number; email: string; warmup_started_at: string | null }, []>(
-      "SELECT id, email, warmup_started_at FROM warmup_accounts ORDER BY id ASC"
+    .query<{ id: number; email: string; warmup_started_at: string | null }, [number]>(
+      "SELECT id, email, warmup_started_at FROM warmup_accounts WHERE client_id = ? OR client_id IS NULL ORDER BY id ASC"
     )
-    .all();
+    .all(clientId);
 
   const result = accounts.map((acct) => {
     let weekNum = 0;
@@ -1430,6 +1467,11 @@ app.post("/reply-queue/process", async (c) => {
 
 app.delete("/reply-queue/clear", (c) => {
   const info = db.run("DELETE FROM warmup_reply_queue WHERE status = 'sent'");
+  return c.json({ success: true, deleted: info.changes });
+});
+
+app.delete("/reply-queue/failed", (c) => {
+  const info = db.run("DELETE FROM warmup_reply_queue WHERE status = 'failed'");
   return c.json({ success: true, deleted: info.changes });
 });
 

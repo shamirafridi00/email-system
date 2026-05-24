@@ -3,6 +3,7 @@ import { readFileSync } from "fs";
 import { db } from "../database";
 import { randomBusinessDelay, isUSBusinessHours, getNextUSBusinessStart } from "../utils/timezone";
 import { sendFailureAlert, sendWarmupCompleteNotification } from "./emailReports";
+import { logError, logWarning } from "./logger";
 
 interface WarmupAccount {
   id: number;
@@ -324,6 +325,13 @@ export async function runWarmupAll(accountSubset?: WarmupAccount[], groupName?: 
         `Warmup cycle failed (${sender.email} → ${receiver.email}):`,
         err
       );
+      logError({
+        error_type: "smtp",
+        severity: "error",
+        message: err instanceof Error ? err.message : String(err),
+        stack_trace: err instanceof Error ? err.stack : undefined,
+        context: { account_email: sender.email, consecutive_failures: (db.query<{ consecutive_failures: number }, [number]>("SELECT consecutive_failures FROM warmup_accounts WHERE id = ?").get(sender.id)?.consecutive_failures ?? 0) + 1 },
+      }).catch(() => {});
       // Track failure on sender account
       db.run(
         "UPDATE warmup_accounts SET consecutive_failures = consecutive_failures + 1, last_failure_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -517,6 +525,7 @@ export async function processReplyQueue(): Promise<number> {
         [acct.email]
       );
       console.error(`[reply-queue] Reply failed — L${row.thread_level}: ${acct.email} → ${row.to_email} | Error: ${err instanceof Error ? err.message : String(err)}`);
+      logWarning("smtp", err instanceof Error ? err.message : String(err), { from_email: acct.email, to_email: row.to_email, thread_level: row.thread_level }).catch(() => {});
       failed++;
     }
   }

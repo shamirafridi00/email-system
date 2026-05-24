@@ -1,4 +1,5 @@
 import { db } from "../database";
+import { logError, logWarning } from "./logger";
 
 interface Lead {
   id: number;
@@ -10,6 +11,7 @@ interface Lead {
 
 interface UnpushedReply extends Lead {
   reply_id: number;
+  hubspot_token?: string | null;
 }
 
 const BASE = "https://api.hubapi.com";
@@ -39,8 +41,8 @@ async function parseError(res: Response): Promise<string> {
   }
 }
 
-export async function pushToHubspot(lead: Lead): Promise<void> {
-  const token = getToken();
+export async function pushToHubspot(lead: Lead, overrideToken?: string | null): Promise<void> {
+  const token = overrideToken ?? getToken();
   if (!token) return;
 
   // Step 1: Create or retrieve contact
@@ -110,10 +112,12 @@ export async function pushToHubspot(lead: Lead): Promise<void> {
     } else {
       const msg = await parseError(res);
       console.error(`HubSpot: contact create failed (${res.status}): ${msg}`);
+      logError({ error_type: "hubspot", severity: "error", message: `Contact create failed (${res.status}): ${msg}`, context: { email: lead.email } }).catch(() => {});
       return;
     }
   } catch (err) {
     console.error("HubSpot: contact create threw:", err);
+    logError({ error_type: "hubspot", severity: "error", message: err instanceof Error ? err.message : String(err), stack_trace: err instanceof Error ? err.stack : undefined, context: { email: lead.email } }).catch(() => {});
     return;
   }
 
@@ -147,9 +151,11 @@ export async function pushToHubspot(lead: Lead): Promise<void> {
     } else {
       const msg = await parseError(res);
       console.error(`HubSpot: deal create failed (${res.status}): ${msg}`);
+      logWarning("hubspot", `Deal create failed (${res.status}): ${msg}`, { email: lead.email }).catch(() => {});
     }
   } catch (err) {
     console.error("HubSpot: deal create threw:", err);
+    logWarning("hubspot", err instanceof Error ? err.message : String(err), { email: lead.email, step: "deal_create" }).catch(() => {});
   }
 
   // Step 3: Associate deal → contact
@@ -179,9 +185,11 @@ export async function pushToHubspot(lead: Lead): Promise<void> {
       } else {
         const msg = await parseError(res);
         console.error(`HubSpot: association failed (${res.status}): ${msg}`);
+        logWarning("hubspot", `Association failed (${res.status}): ${msg}`, { deal_id: dealId, contact_id: contactId }).catch(() => {});
       }
     } catch (err) {
       console.error("HubSpot: association threw:", err);
+      logWarning("hubspot", err instanceof Error ? err.message : String(err), { deal_id: dealId, contact_id: contactId, step: "association" }).catch(() => {});
     }
   }
 
@@ -223,9 +231,12 @@ export function getUnpushedReplies(): UnpushedReply[] {
     .query<UnpushedReply, []>(
       `SELECT
          r.id AS reply_id,
-         l.id, l.first_name, l.last_name, l.email, l.company
+         l.id, l.first_name, l.last_name, l.email, l.company,
+         cl.hubspot_token
        FROM replies r
        JOIN leads l ON l.id = r.lead_id
+       LEFT JOIN campaigns c ON c.id = l.campaign_id
+       LEFT JOIN clients cl ON cl.id = c.client_id
        WHERE r.pushed_to_hubspot = 0`
     )
     .all();

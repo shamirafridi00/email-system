@@ -7,30 +7,37 @@ const app = new Hono();
 const VALID_STATUSES = ["draft", "active", "paused", "completed"] as const;
 
 app.get("/", (c) => {
-  const rows = db
-    .query<
-      {
-        id: number;
-        name: string;
-        account_id: number;
-        account_email: string;
-        status: string;
-        daily_limit: number;
-        send_days: string;
-        send_start_hour: number;
-        send_end_hour: number;
-        created_at: string;
-      },
-      []
-    >(
-      `SELECT c.id, c.name, c.account_id, a.email AS account_email,
-              c.status, c.daily_limit, c.send_days,
-              c.send_start_hour, c.send_end_hour, c.created_at
-       FROM campaigns c
-       LEFT JOIN accounts a ON a.id = c.account_id
-       ORDER BY c.created_at DESC`
-    )
-    .all();
+  const showAll = c.req.query("show_all") === "true";
+  const explicitClientId = c.req.query("client_id");
+
+  let clientId: number | null = null;
+  if (!showAll) {
+    if (explicitClientId) {
+      clientId = Number(explicitClientId);
+    } else {
+      const setting = db.query<{ value: string }, []>(
+        "SELECT value FROM system_settings WHERE key = 'current_client_id'"
+      ).get();
+      if (setting) clientId = Number(setting.value);
+    }
+  }
+
+  const baseQuery = `SELECT c.id, c.name, c.account_id, a.email AS account_email,
+          c.status, c.daily_limit, c.send_days,
+          c.send_start_hour, c.send_end_hour, c.created_at,
+          COALESCE(c.timezone_aware, 0) AS timezone_aware,
+          c.client_id
+   FROM campaigns c
+   LEFT JOIN accounts a ON a.id = c.account_id`;
+
+  const rows = clientId !== null
+    ? db.query<Record<string, unknown>, [number]>(
+        `${baseQuery} WHERE c.client_id = ? ORDER BY c.created_at DESC`
+      ).all(clientId)
+    : db.query<Record<string, unknown>, []>(
+        `${baseQuery} ORDER BY c.created_at DESC`
+      ).all();
+
   return c.json(rows);
 });
 
@@ -42,15 +49,21 @@ app.post("/", async (c) => {
     send_days?: string;
     send_start_hour?: number;
     send_end_hour?: number;
+    timezone_aware?: boolean | number;
   }>();
 
   if (!body.name || !body.account_id) {
     return c.json({ error: "name and account_id are required" }, 400);
   }
 
+  const clientSetting = db.query<{ value: string }, []>(
+    "SELECT value FROM system_settings WHERE key = 'current_client_id'"
+  ).get();
+  const currentClientId = clientSetting ? Number(clientSetting.value) : null;
+
   const result = db.run(
-    `INSERT INTO campaigns (name, account_id, daily_limit, send_days, send_start_hour, send_end_hour)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO campaigns (name, account_id, daily_limit, send_days, send_start_hour, send_end_hour, timezone_aware, client_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       body.name,
       body.account_id,
@@ -58,6 +71,8 @@ app.post("/", async (c) => {
       body.send_days ?? "mon,tue,wed,thu,fri",
       body.send_start_hour ?? 9,
       body.send_end_hour ?? 17,
+      body.timezone_aware ? 1 : 0,
+      currentClientId,
     ]
   );
 
@@ -74,11 +89,14 @@ app.put("/:id", async (c) => {
     send_start_hour?: number;
     send_end_hour?: number;
     status?: string;
+    timezone_aware?: boolean | number;
   }>();
 
   const fieldMap: Record<string, unknown> = {};
-  for (const key of ["name", "account_id", "daily_limit", "send_days", "send_start_hour", "send_end_hour", "status"] as const) {
-    if (body[key] !== undefined) fieldMap[key] = body[key];
+  for (const key of ["name", "account_id", "daily_limit", "send_days", "send_start_hour", "send_end_hour", "status", "timezone_aware"] as const) {
+    if (body[key] !== undefined) {
+      fieldMap[key] = key === "timezone_aware" ? (body[key] ? 1 : 0) : body[key];
+    }
   }
 
   if (Object.keys(fieldMap).length === 0) {

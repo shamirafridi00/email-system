@@ -1,6 +1,11 @@
 // ─── Warmup Dashboard ────────────────────────────────────────────────────────
 async function loadWarmupDashboard() {
   el('wd-stat-grid').innerHTML = '<div class="loading"><span class="spinner"></span></div>';
+  // Show current client name in heading
+  const wdClientName = document.getElementById('wd-client-name');
+  if (wdClientName && clientsState && clientsState.currentClient) {
+    wdClientName.textContent = '— ' + clientsState.currentClient.name;
+  }
   try {
     const ws = await api('/dashboard/warmup-stats');
     const wlog = await api('/warmup/log');
@@ -80,23 +85,73 @@ async function loadWarmupDashboard() {
 }
 
 // ─── Campaign Dashboard ───────────────────────────────────────────────────────
+var quickStatusInterval = null;
+
 async function loadCampaignDashboard() {
   el('cd-stat-grid').innerHTML = '<div class="loading"><span class="spinner"></span></div>';
   el('cd-sent-log').innerHTML = '<div class="loading"><span class="spinner"></span></div>';
+
+  // Quick health status dot — fetch immediately then every 5 minutes
+  loadQuickStatus();
+  if (!quickStatusInterval) {
+    quickStatusInterval = setInterval(loadQuickStatus, 5 * 60 * 1000);
+  }
+
   try {
-    const stats = await api('/dashboard/stats');
-    const leadStats = await api('/leads/stats');
-    const activity = await api('/dashboard/activity');
+    const [stats, leadStats, activity, campStats, bounceStats] = await Promise.all([
+      api('/dashboard/stats'),
+      api('/leads/stats'),
+      api('/dashboard/activity'),
+      api('/dashboard/campaign-stats').catch(function() { return { aggregate: {} }; }),
+      api('/dashboard/bounce-stats').catch(function() { return []; }),
+    ]);
 
     const totalLeads = Object.values(leadStats).reduce(function(a, b) { return a + b; }, 0);
     const repliedLeads = leadStats.replied || 0;
+    const unsubLeads = leadStats.unsubscribed || 0;
     const replyRate = totalLeads > 0 ? ((repliedLeads / totalLeads) * 100).toFixed(1) : '0.0';
+    const unsubRate = totalLeads > 0 ? ((unsubLeads / totalLeads) * 100).toFixed(1) : '0.0';
+    const agg = campStats.aggregate || {};
+    const openRate = agg.open_rate != null ? agg.open_rate : '—';
+    const totalOpened = agg.total_opened != null ? agg.total_opened : '—';
+
+    // Bounce warning banner — show if any account has >5% bounce rate
+    var highBounceAccounts = (bounceStats || []).filter(function(s) { return s.bounce_rate_7d > 5; });
+    var pausedAccounts = highBounceAccounts.filter(function(s) { return s.bounce_rate_7d > 10; });
+    var warnContainer = document.getElementById('cd-bounce-warning');
+    if (warnContainer) {
+      if (pausedAccounts.length > 0) {
+        warnContainer.innerHTML = '<div style="background:#7f1d1d;border:1px solid #dc2626;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between">' +
+          '<div><span style="font-weight:700;color:#fca5a5">⚠ ' + pausedAccounts.length + ' account(s) auto-paused</span>' +
+          '<span style="font-size:12px;color:#fca5a5;margin-left:8px">due to high bounce rate (>10%) — check Sending Accounts</span></div>' +
+          '<button class="btn btn-sm" style="background:#dc2626;color:#fff" onclick="navigate(\'accounts\')">View Accounts</button>' +
+        '</div>';
+      } else if (highBounceAccounts.length > 0) {
+        warnContainer.innerHTML = '<div style="background:#78350f;border:1px solid #d97706;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between">' +
+          '<div><span style="font-weight:700;color:#fde68a">⚡ ' + highBounceAccounts.length + ' account(s) have elevated bounce rate (>5%)</span>' +
+          '<span style="font-size:12px;color:#fde68a;margin-left:8px">— monitor closely</span></div>' +
+          '<button class="btn btn-sm" style="background:#d97706;color:#fff" onclick="navigate(\'accounts\')">View Accounts</button>' +
+        '</div>';
+      } else {
+        warnContainer.innerHTML = '';
+      }
+    }
+
+    // Aggregate bounce rate across all accounts (7d)
+    var totalBounced7d = (bounceStats || []).reduce(function(a, s) { return a + s.bounced_7d; }, 0);
+    var totalSent7d = (bounceStats || []).reduce(function(a, s) { return a + s.total_7d; }, 0);
+    var overallBounceRate = totalSent7d >= 10 ? ((totalBounced7d / totalSent7d) * 100).toFixed(1) + '%' : '—';
+    var bounceRateColor = totalSent7d >= 10 && (totalBounced7d / totalSent7d) > 0.10 ? 'red' : totalSent7d >= 10 && (totalBounced7d / totalSent7d) > 0.05 ? '' : 'green';
 
     el('cd-stat-grid').innerHTML =
       '<div class="stat-card"><div class="label">Active Campaigns</div><div class="value indigo">' + (stats.active_campaigns || 0) + '</div></div>' +
       '<div class="stat-card"><div class="label">Total Leads</div><div class="value">' + totalLeads + '</div></div>' +
       '<div class="stat-card"><div class="label">Emails Sent Today</div><div class="value">' + (stats.emails_sent_today || 0) + '</div></div>' +
+      '<div class="stat-card"><div class="label">Emails Opened</div><div class="value green">' + totalOpened + '</div></div>' +
+      '<div class="stat-card"><div class="label">Open Rate</div><div class="value green">' + (openRate !== '—' ? openRate + '%' : '—') + '</div></div>' +
       '<div class="stat-card"><div class="label">Reply Rate</div><div class="value green">' + replyRate + '%</div></div>' +
+      '<div class="stat-card"><div class="label">Bounce Rate (7d)</div><div class="value ' + bounceRateColor + '">' + overallBounceRate + '</div></div>' +
+      '<div class="stat-card"><div class="label">Unsubscribed</div><div class="value ' + (unsubLeads > 0 ? 'red' : '') + '">' + unsubLeads + ' <span style="font-size:12px;font-weight:400;color:#6b7280">(' + unsubRate + '%)</span></div></div>' +
       '<div class="stat-card"><div class="label">Unpushed Replies</div><div class="value ' + (stats.unpushed_replies > 0 ? 'indigo' : '') + '">' + (stats.unpushed_replies || 0) + '</div></div>' +
       '<div class="stat-card"><div class="label">HubSpot</div><div class="value ' + (stats.hubspot_connected ? 'green' : 'red') + '">' + (stats.hubspot_connected ? 'Connected' : 'Disconnected') + '</div></div>';
 

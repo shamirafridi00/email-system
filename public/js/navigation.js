@@ -12,12 +12,12 @@ function navigate(section) {
     s.classList.toggle('active', s.id === 'section-' + section);
   });
   const loaders = {
-    'warmup-dashboard': loadWarmupDashboard,
-    'warmup-progress': loadWarmupProgress,
-    'warmup-schedule': loadWarmupSchedule,
-    'warmup-readiness': loadWarmupReadiness,
-    'warmup-groups': loadAccountGroups,
-    'warmup-accounts': loadWarmupAccounts,
+    'warmup-dashboard': function() { loadCurrentClient(); loadWarmupDashboard(); },
+    'warmup-progress': function() { loadCurrentClient(); loadWarmupProgress(); },
+    'warmup-schedule': function() { loadCurrentClient(); loadWarmupSchedule(); },
+    'warmup-readiness': function() { loadCurrentClient(); loadWarmupReadiness(); },
+    'warmup-groups': function() { loadCurrentClient(); loadAccountGroups(); },
+    'warmup-accounts': function() { loadCurrentClient(); loadWarmupAccounts(); },
     'conversations': function() { loadConversations(); loadConversationTopics(); loadAutoGenerateSetting(); },
     'warmup-history': loadAccountHistory,
     'warmup-analytics': loadWarmupAnalytics,
@@ -25,12 +25,24 @@ function navigate(section) {
     'warmup-library': loadTopicsLibrary,
     'warmup-log': loadWarmupLog,
     'warmup-placement': loadPlacementTest,
-    'campaign-dashboard': loadCampaignDashboard,
-    'campaigns': loadCampaigns,
-    'leads': loadLeads,
-    'sending-accounts': loadAccounts,
+    'campaign-dashboard': function() { loadCurrentClient(); loadCampaignDashboard(); },
+    'analytics': function() { loadCurrentClient(); loadAnalytics(); },
+    'campaigns': function() { loadCurrentClient(); loadCampaigns(); },
+    'leads': function() { loadCurrentClient(); loadLeads(); },
+    'sending-accounts': function() { loadCurrentClient(); loadAccounts(); },
     'settings': function() { loadSettings(); loadNotificationSettings(); },
+    'health': loadHealthCheck,
+    'dns-checker': function() { loadDNSHistory(); loadSendingAccountDomains(); },
+    'client-reports': loadClientReports,
+    'exports': loadExports,
+    'error-log': function() { loadErrorLog(); startErrorAutoRefresh(); },
+    'backup': loadBackups,
+    'blacklist': loadBlacklist,
+    'clients': loadClients,
   };
+  // Stop error log auto refresh when leaving that section
+  if (section !== 'error-log') stopErrorAutoRefresh();
+
   if (loaders[section]) loaders[section]();
 }
 
@@ -42,4 +54,9 @@ function navigate(section) {
 });
 
 restoreHubspotToken();
+loadCurrentClient();
 navigate('campaign-dashboard');
+
+// Sidebar error badge — load immediately and refresh every 5 minutes
+updateErrorBadge();
+setInterval(updateErrorBadge, 5 * 60 * 1000);

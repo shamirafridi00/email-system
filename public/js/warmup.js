@@ -301,6 +301,12 @@ async function loadWarmupAccounts() {
 }
 
 async function loadWarmupAccountsTable() {
+  // Show client context notes
+  const clientName = clientsState && clientsState.currentClient ? clientsState.currentClient.name : null;
+  const clientNote = document.getElementById('warmup-accounts-client-note');
+  const addNote = document.getElementById('warmup-add-client-note');
+  if (clientNote && clientName) clientNote.textContent = 'Showing warmup accounts for ' + clientName;
+  if (addNote && clientName) addNote.textContent = 'New accounts will be added to ' + clientName;
   try {
     const rows = await api('/warmup/accounts');
     // Fetch scores in parallel and build a lookup map by email
@@ -2609,6 +2615,17 @@ async function processQueueNow() {
     toast(e.message, 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '⚡ Process Queue Now'; }
+  }
+}
+
+async function clearFailedQueue() {
+  if (!confirm('Delete all failed reply queue entries? This cannot be undone.')) return;
+  try {
+    var r = await api('/warmup/reply-queue/failed', { method: 'DELETE' });
+    toast('Cleared ' + r.deleted + ' failed entry(ies)', 'success');
+    loadReplyQueue();
+  } catch(e) {
+    toast(e.message, 'error');
   }
 }
 

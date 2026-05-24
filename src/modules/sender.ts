@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { db } from "../database";
+import { isBlacklisted } from "./blacklistChecker";
 
 export interface SendOptions {
   from: string;
@@ -7,6 +8,9 @@ export interface SendOptions {
   subject: string;
   body: string;
   appPassword: string;
+  unsubscribe_token?: string;
+  lead_email?: string;
+  tracking_token?: string;
 }
 
 export interface AccountRow {
@@ -36,7 +40,7 @@ function capitalizeSentences(text: string): string {
   return text.replace(/(^\s*|[.!?]\s+)([a-z])/g, (_, pre, letter) => pre + letter.toUpperCase());
 }
 
-function buildHtml(text: string): string {
+function buildHtml(text: string, unsubscribeUrl?: string, leadEmail?: string, trackingPixelUrl?: string): string {
   const paragraphs = text
     .split(/\n\s*\n/)
     .map((b) => b.trim())
@@ -47,27 +51,69 @@ function buildHtml(text: string): string {
     })
     .join("\n");
 
+  const footer = unsubscribeUrl
+    ? `\n<div style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e5e5;font-size:12px;color:#888888;text-align:center">
+You received this email because ${leadEmail ?? "your email"} matched your business profile.
+To unsubscribe, <a href="${unsubscribeUrl}" style="color:#888888">click here</a>.
+</div>`
+    : "";
+
+  const pixel = trackingPixelUrl
+    ? `\n<img src="${trackingPixelUrl}" width="1" height="1" style="display:block;width:1px;height:1px;border:0;margin:0;padding:0" alt="" border="0">`
+    : "";
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body>
 <div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#222222;max-width:600px">
-${paragraphs}
+${paragraphs}${footer}${pixel}
 </div>
 </body>
 </html>`;
 }
 
 export async function sendEmail(opts: SendOptions): Promise<void> {
+  const blacklistCheck = isBlacklisted(opts.to);
+  if (blacklistCheck.blacklisted) {
+    throw new Error(`Email address is blacklisted: ${blacklistCheck.reason}`);
+  }
+
   const processedBody = capitalizeSentences(opts.body);
   const transport = buildTransport(opts.from, opts.appPassword);
-  await transport.sendMail({
+
+  const dashboardRow = db
+    .query<{ value: string }, []>("SELECT value FROM system_settings WHERE key = 'dashboard_url'")
+    .get();
+  const base = (dashboardRow?.value ?? "http://localhost:3000").replace(/\/$/, "");
+
+  let unsubscribeUrl: string | undefined;
+  if (opts.unsubscribe_token) {
+    unsubscribeUrl = `${base}/leads/unsubscribe?token=${opts.unsubscribe_token}`;
+  }
+
+  let trackingPixelUrl: string | undefined;
+  if (opts.tracking_token) {
+    trackingPixelUrl = `${base}/track/open/${opts.tracking_token}`;
+  }
+
+  const plainText = unsubscribeUrl
+    ? `${processedBody}\n\n--\nTo unsubscribe visit: ${unsubscribeUrl}`
+    : processedBody;
+
+  const mailOptions: Parameters<typeof transport.sendMail>[0] = {
     from: opts.from,
     to: opts.to,
     subject: opts.subject,
-    text: processedBody,
-    html: buildHtml(processedBody),
-  });
+    text: plainText,
+    html: buildHtml(processedBody, unsubscribeUrl, opts.lead_email, trackingPixelUrl),
+  };
+
+  if (unsubscribeUrl) {
+    mailOptions.headers = { "List-Unsubscribe": `<${unsubscribeUrl}>` };
+  }
+
+  await transport.sendMail(mailOptions);
 }
 
 export function interpolate(

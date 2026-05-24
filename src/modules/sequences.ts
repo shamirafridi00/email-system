@@ -1,5 +1,9 @@
 import { db } from "../database";
 import { sendEmail, interpolate, type AccountRow } from "./sender";
+import { randomUUID } from "crypto";
+import { calculateTimezoneAwareSendDate } from "./timezoneMapper";
+import { isBlacklisted, autoBlacklistBounced } from "./blacklistChecker";
+import { logWarning } from "./logger";
 
 interface LeadRow {
   id: number;
@@ -15,6 +19,10 @@ interface LeadRow {
   send_start_hour: number;
   send_end_hour: number;
   campaign_daily_limit: number;
+  unsubscribe_token: string | null;
+  timezone_offset: number | null;
+  optimal_send_hour: number;
+  timezone_aware: number;
 }
 
 interface StepRow {
@@ -86,9 +94,10 @@ export async function runSequences(): Promise<RunResult> {
     .query<LeadRow, [string]>(
       `SELECT
          l.id, l.campaign_id, l.first_name, l.last_name, l.email,
-         l.company, l.personalized_line, l.current_step,
+         l.company, l.personalized_line, l.current_step, l.unsubscribe_token,
+         l.timezone_offset, COALESCE(l.optimal_send_hour, 9) AS optimal_send_hour,
          c.account_id, c.send_days, c.send_start_hour, c.send_end_hour,
-         c.daily_limit AS campaign_daily_limit
+         c.daily_limit AS campaign_daily_limit, COALESCE(c.timezone_aware, 0) AS timezone_aware
        FROM leads l
        JOIN campaigns c ON c.id = l.campaign_id
        WHERE l.status = 'active'
@@ -100,12 +109,16 @@ export async function runSequences(): Promise<RunResult> {
   for (const lead of leads) {
     result.processed++;
 
-    if (
-      !isWithinSendWindow(
-        lead.send_days,
-        lead.send_start_hour,
-        lead.send_end_hour
-      )
+    // Timezone-aware time check: only send if we're within 2h of the lead's optimal local hour
+    if (lead.timezone_aware && lead.timezone_offset !== null) {
+      const nowUtc = new Date();
+      const leadLocalHour = ((nowUtc.getUTCHours() + lead.timezone_offset) % 24 + 24) % 24;
+      if (leadLocalHour < lead.optimal_send_hour || leadLocalHour >= lead.optimal_send_hour + 2) {
+        result.skipped++;
+        continue;
+      }
+    } else if (
+      !isWithinSendWindow(lead.send_days, lead.send_start_hour, lead.send_end_hour)
     ) {
       result.skipped++;
       continue;
@@ -134,6 +147,17 @@ export async function runSequences(): Promise<RunResult> {
       continue;
     }
 
+    const blacklistCheck = isBlacklisted(lead.email);
+    if (blacklistCheck.blacklisted) {
+      db.run("UPDATE leads SET status = 'unsubscribed', validation_reason = ? WHERE id = ?", [
+        `Blacklisted - ${blacklistCheck.reason}`,
+        lead.id,
+      ]);
+      logWarning("campaign", `Skipped blacklisted email: ${lead.email} — ${blacklistCheck.reason}`, { lead_id: lead.id }).catch(() => {});
+      result.skipped++;
+      continue;
+    }
+
     const vars: Record<string, string> = {
       first_name: lead.first_name ?? "",
       last_name: lead.last_name ?? "",
@@ -145,17 +169,22 @@ export async function runSequences(): Promise<RunResult> {
     const body = interpolate(step.body, vars);
 
     try {
+      const tracking_token = randomUUID();
+
       await sendEmail({
         from: account.email,
         to: lead.email,
         subject,
         body,
         appPassword: account.app_password,
+        unsubscribe_token: lead.unsubscribe_token ?? undefined,
+        lead_email: lead.email,
+        tracking_token,
       });
 
       db.run(
-        "INSERT INTO sent_log (lead_id, campaign_id, step_number, subject) VALUES (?, ?, ?, ?)",
-        [lead.id, lead.campaign_id, lead.current_step, subject]
+        "INSERT INTO sent_log (lead_id, campaign_id, step_number, subject, tracking_token) VALUES (?, ?, ?, ?, ?)",
+        [lead.id, lead.campaign_id, lead.current_step, subject, tracking_token]
       );
 
       db.run(
@@ -173,7 +202,17 @@ export async function runSequences(): Promise<RunResult> {
         .get(lead.campaign_id, lead.current_step);
 
       if (nextStep) {
-        const nextSendDate = addDays(today, nextStep.delay_days);
+        let nextSendDate: string;
+        if (lead.timezone_aware && lead.timezone_offset !== null) {
+          const tzDate = calculateTimezoneAwareSendDate(
+            nextStep.delay_days,
+            lead.timezone_offset,
+            lead.optimal_send_hour
+          );
+          nextSendDate = tzDate.toISOString().split("T")[0];
+        } else {
+          nextSendDate = addDays(today, nextStep.delay_days);
+        }
         db.run(
           "UPDATE leads SET current_step = ?, next_send_date = ? WHERE id = ?",
           [nextStep.step_number, nextSendDate, lead.id]
@@ -200,10 +239,11 @@ export async function runSequences(): Promise<RunResult> {
         message.includes("554")
       ) {
         db.run(
-          "INSERT INTO sent_log (lead_id, campaign_id, step_number, subject, bounced) VALUES (?, ?, ?, ?, 1)",
-          [lead.id, lead.campaign_id, lead.current_step, subject]
+          "INSERT INTO sent_log (lead_id, campaign_id, step_number, subject, bounced, tracking_token) VALUES (?, ?, ?, ?, 1, ?)",
+          [lead.id, lead.campaign_id, lead.current_step, subject, randomUUID()]
         );
         db.run("UPDATE leads SET status = 'bounced' WHERE id = ?", [lead.id]);
+        autoBlacklistBounced(lead.email).catch(() => {});
         result.bounced++;
       } else {
         result.skipped++;

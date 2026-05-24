@@ -11,9 +11,22 @@ async function loadCampaigns() {
 function renderCampaigns() {
   const rows = state.campaigns;
   el('campaigns-table').innerHTML = rows.length
-    ? '<table><thead><tr><th>Name</th><th>Account</th><th>Status</th><th>Daily Limit</th><th>Actions</th></tr></thead>' +
+    ? '<table><thead><tr><th>Name</th><th>Account</th><th>Status</th><th>Daily Limit</th><th>Open Rate</th><th>Actions</th></tr></thead>' +
       '<tbody id="campaigns-tbody">' + rows.map(function(r) { return campaignRow(r); }).join('') + '</tbody></table>'
     : '<div class="no-data">No campaigns yet</div>';
+  // Load open rates for all campaigns asynchronously
+  rows.forEach(function(r) { loadCampaignOpenRate(r.id); });
+}
+
+async function loadCampaignOpenRate(campaignId) {
+  try {
+    var stats = await api('/dashboard/campaign-stats/' + campaignId);
+    var el2 = document.getElementById('camp-open-rate-' + campaignId);
+    if (!el2) return;
+    var rate = stats.open_rate || 0;
+    var color = rate >= 40 ? '#22c55e' : rate >= 20 ? '#f59e0b' : '#ef4444';
+    el2.innerHTML = '<span style="color:' + color + ';font-weight:700">' + rate + '%</span>';
+  } catch(e) { /* non-critical */ }
 }
 
 function campaignRow(r) {
@@ -29,11 +42,14 @@ function campaignRow(r) {
     return '<label><input type="checkbox" class="ef-day-' + r.id + '" value="' + d + '"' + (days.includes(d) ? ' checked' : '') + '> ' + d.charAt(0).toUpperCase() + d.slice(1) + '</label>';
   }).join('');
 
+  var tzBadge = r.timezone_aware ? ' <span title="Timezone-aware sending enabled" style="font-size:11px;color:#6366f1">🕐</span>' : '';
+
   return '<tr class="clickable-row" onclick="toggleSteps(' + r.id + ')" id="cr-' + r.id + '">' +
-    '<td><strong>' + r.name + '</strong></td>' +
+    '<td><strong>' + r.name + '</strong>' + tzBadge + '</td>' +
     '<td>' + (r.account_email || '—') + '</td>' +
     '<td>' + statusBadge(r.status) + '</td>' +
     '<td>' + r.daily_limit + '/day</td>' +
+    '<td id="camp-open-rate-' + r.id + '" style="font-size:12px;color:#6b7280">—</td>' +
     '<td onclick="event.stopPropagation()" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">' +
       '<select onchange="updateCampaignStatus(' + r.id + ', this.value)" style="width:110px;padding:4px 6px;font-size:12px">' + statusOptions + '</select>' +
       '<button class="btn btn-ghost btn-sm" onclick="toggleEditCampaign(' + r.id + ')">Edit</button>' +
@@ -53,6 +69,12 @@ function campaignRow(r) {
           '<div class="form-group"><label>Send Days</label><div class="checkboxes">' + dayCheckboxes + '</div></div>' +
           '<div class="form-group" style="max-width:110px"><label>Start Hour</label><input id="ef-start-' + r.id + '" type="number" value="' + r.send_start_hour + '" min="0" max="23"></div>' +
           '<div class="form-group" style="max-width:110px"><label>End Hour</label><input id="ef-end-' + r.id + '" type="number" value="' + r.send_end_hour + '" min="0" max="23"></div>' +
+        '</div>' +
+        '<div style="margin-bottom:12px">' +
+          '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">' +
+            '<input type="checkbox" id="ef-tz-aware-' + r.id + '"' + (r.timezone_aware ? ' checked' : '') + '>' +
+            '🕐 Timezone-aware sending (send at lead\'s local time using their detected timezone)' +
+          '</label>' +
         '</div>' +
         '<div style="display:flex;gap:8px">' +
           '<button class="btn btn-primary btn-sm" onclick="saveEditCampaign(' + r.id + ')">Save Changes</button>' +
@@ -75,6 +97,7 @@ function toggleEditCampaign(id) {
 
 async function saveEditCampaign(id) {
   const selectedDays = Array.from(document.querySelectorAll('.ef-day-' + id + ':checked')).map(function(c) { return c.value; }).join(',');
+  var tzAwareEl = document.getElementById('ef-tz-aware-' + id);
   const body = {
     name: el('ef-name-' + id).value.trim(),
     account_id: parseInt(el('ef-account-' + id).value),
@@ -82,6 +105,7 @@ async function saveEditCampaign(id) {
     send_days: selectedDays || 'mon,tue,wed,thu,fri',
     send_start_hour: parseInt(el('ef-start-' + id).value),
     send_end_hour: parseInt(el('ef-end-' + id).value),
+    timezone_aware: tzAwareEl && tzAwareEl.checked ? 1 : 0,
   };
   if (!body.name) { toast('Name is required', 'error'); return; }
   try {
@@ -99,6 +123,13 @@ async function toggleSteps(id) {
   if (row.style.display === 'none') {
     row.style.display = '';
     state.expandedCampaign = id;
+    // Render tab bar then load default (steps) tab
+    el('steps-inner-' + id).innerHTML =
+      '<div style="display:flex;gap:0;border-bottom:1px solid #333;margin-bottom:16px">' +
+        '<button id="tab-steps-' + id + '" onclick="showCampaignTab(' + id + ',\'steps\')" style="padding:8px 18px;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2px solid #6366f1;color:#6366f1;cursor:pointer">Sequence Steps</button>' +
+        '<button id="tab-analytics-' + id + '" onclick="showCampaignTab(' + id + ',\'analytics\')" style="padding:8px 18px;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;color:#6b7280;cursor:pointer">Analytics</button>' +
+      '</div>' +
+      '<div id="tab-content-' + id + '"><div class="loading"><span class="spinner"></span></div></div>';
     await loadSteps(id);
   } else {
     row.style.display = 'none';
@@ -106,8 +137,24 @@ async function toggleSteps(id) {
   }
 }
 
+function showCampaignTab(id, tab) {
+  // Update tab styles
+  var stepsBtn = el('tab-steps-' + id);
+  var analyticsBtn = el('tab-analytics-' + id);
+  if (tab === 'steps') {
+    stepsBtn.style.borderBottomColor = '#6366f1'; stepsBtn.style.color = '#6366f1';
+    analyticsBtn.style.borderBottomColor = 'transparent'; analyticsBtn.style.color = '#6b7280';
+    loadSteps(id);
+  } else {
+    analyticsBtn.style.borderBottomColor = '#6366f1'; analyticsBtn.style.color = '#6366f1';
+    stepsBtn.style.borderBottomColor = 'transparent'; stepsBtn.style.color = '#6b7280';
+    loadCampaignAnalytics(id);
+  }
+}
+
 async function loadSteps(campaignId) {
-  const inner = el('steps-inner-' + campaignId);
+  // Render into the tab-content div if it exists, otherwise fall back to steps-inner
+  const inner = el('tab-content-' + campaignId) || el('steps-inner-' + campaignId);
   inner.innerHTML = '<div class="loading"><span class="spinner"></span></div>';
   try {
     const steps = await api('/campaigns/' + campaignId + '/steps');
@@ -248,6 +295,7 @@ async function saveCampaign() {
     send_days: days || 'mon,tue,wed,thu,fri',
     send_start_hour: parseInt(el('cf-start').value),
     send_end_hour: parseInt(el('cf-end').value),
+    timezone_aware: el('cf-timezone-aware').checked ? 1 : 0,
   };
   if (!body.name || !body.account_id) { toast('Name and account required', 'error'); return; }
   try {
@@ -255,6 +303,7 @@ async function saveCampaign() {
     toast('Campaign created', 'success');
     el('campaign-form').classList.remove('open');
     el('cf-name').value = '';
+    el('cf-timezone-aware').checked = false;
     loadCampaigns();
   } catch(e) { toast(e.message, 'error'); }
 }
@@ -280,6 +329,83 @@ function populateAccountDropdown(id, accounts) {
   el(id).innerHTML = accounts.map(function(a) {
     return '<option value="' + a.id + '">' + a.email + '</option>';
   }).join('');
+}
+
+async function loadCampaignAnalytics(campaignId) {
+  var content = el('tab-content-' + campaignId) || el('steps-inner-' + campaignId);
+  content.innerHTML = '<div class="loading"><span class="spinner"></span></div>';
+  try {
+    var stats = await api('/dashboard/campaign-stats/' + campaignId);
+    content.innerHTML = renderAnalyticsTab(stats);
+  } catch(e) {
+    content.innerHTML = '<div style="color:#ef4444;padding:16px">' + escHtml(e.message) + '</div>';
+  }
+}
+
+function progressBar(pct, color) {
+  color = color || '#6366f1';
+  return '<div style="background:#1f2937;border-radius:4px;height:8px;width:100%;overflow:hidden">' +
+    '<div style="background:' + color + ';height:100%;width:' + Math.min(100, pct) + '%;border-radius:4px;transition:width .4s"></div>' +
+    '</div>';
+}
+
+function renderAnalyticsTab(stats) {
+  var openColor = stats.open_rate >= 40 ? '#22c55e' : stats.open_rate >= 20 ? '#f59e0b' : '#ef4444';
+  var html =
+    '<div style="padding:4px 0 20px 0">' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:20px">' +
+      '<div class="stat-card" style="padding:10px 14px"><div class="label" style="font-size:10px">Total Sent</div><div class="value" style="font-size:20px">' + stats.total_sent + '</div></div>' +
+      '<div class="stat-card" style="padding:10px 14px"><div class="label" style="font-size:10px;color:#22c55e">Opened</div><div class="value" style="font-size:20px;color:#22c55e">' + stats.total_opened + '</div></div>' +
+      '<div class="stat-card" style="padding:10px 14px"><div class="label" style="font-size:10px">Replied</div><div class="value" style="font-size:20px">' + stats.total_replied + '</div></div>' +
+      '<div class="stat-card" style="padding:10px 14px"><div class="label" style="font-size:10px;color:#ef4444">Bounced</div><div class="value" style="font-size:20px;color:#ef4444">' + stats.total_bounced + '</div></div>' +
+    '</div>' +
+
+    '<div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px">' +
+      '<div>' +
+        '<div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px">' +
+          '<span style="color:#9ca3af">Open Rate</span>' +
+          '<span style="color:' + openColor + ';font-weight:700">' + stats.open_rate + '%</span>' +
+        '</div>' +
+        progressBar(stats.open_rate, openColor) +
+      '</div>' +
+      '<div>' +
+        '<div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px">' +
+          '<span style="color:#9ca3af">Reply Rate</span>' +
+          '<span style="color:#6366f1;font-weight:700">' + stats.reply_rate + '%</span>' +
+        '</div>' +
+        progressBar(stats.reply_rate, '#6366f1') +
+      '</div>' +
+      '<div>' +
+        '<div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px">' +
+          '<span style="color:#9ca3af">Bounce Rate</span>' +
+          '<span style="color:#ef4444;font-weight:700">' + stats.bounce_rate + '%</span>' +
+        '</div>' +
+        progressBar(stats.bounce_rate, '#ef4444') +
+      '</div>' +
+    '</div>';
+
+  if (stats.per_step && stats.per_step.length) {
+    html += '<div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#555;margin-bottom:10px">Per Step Breakdown</div>';
+    html += '<table style="width:100%;font-size:13px"><thead><tr>' +
+      '<th style="text-align:left;padding:6px 10px;color:#6b7280;font-weight:600">Step</th>' +
+      '<th style="text-align:right;padding:6px 10px;color:#6b7280;font-weight:600">Sent</th>' +
+      '<th style="text-align:right;padding:6px 10px;color:#6b7280;font-weight:600">Opened</th>' +
+      '<th style="text-align:right;padding:6px 10px;color:#6b7280;font-weight:600">Open Rate</th>' +
+      '</tr></thead><tbody>' +
+      stats.per_step.map(function(s) {
+        var oc = s.open_rate >= 40 ? '#22c55e' : s.open_rate >= 20 ? '#f59e0b' : '#ef4444';
+        return '<tr style="border-top:1px solid #1f2937">' +
+          '<td style="padding:6px 10px">Step ' + s.step_number + '</td>' +
+          '<td style="padding:6px 10px;text-align:right">' + s.sent + '</td>' +
+          '<td style="padding:6px 10px;text-align:right;color:#22c55e">' + s.opened + '</td>' +
+          '<td style="padding:6px 10px;text-align:right;color:' + oc + ';font-weight:700">' + s.open_rate + '%</td>' +
+          '</tr>';
+      }).join('') +
+      '</tbody></table>';
+  }
+
+  html += '</div>';
+  return html;
 }
 
 // ─── Email Preview Modal ──────────────────────────────────────────────────────

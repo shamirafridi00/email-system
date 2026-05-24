@@ -31,17 +31,29 @@
     </div>
     <div class="nav-divider"></div>
     <div class="nav-section campaign-section">
-      <div class="nav-section-label"><span class="dot"></span>Campaign System</div>
+      <div class="nav-section-label"><span class="dot" id="campaign-section-client-dot" style="background:#6366f1"></span>Campaign System</div>
       <a data-section="campaign-dashboard">📊 Campaign Dashboard</a>
+      <a data-section="analytics">📈 Analytics</a>
       <a data-section="campaigns">📣 Campaigns</a>
       <a data-section="leads">👥 Leads</a>
       <a data-section="sending-accounts">⚙ Sending Accounts</a>
+      <a data-section="blacklist">🚫 Blacklist</a>
       <a data-section="campaign-manual">📖 Campaign Manual</a>
+      <a data-section="client-reports">📧 Client Reports</a>
+      <a data-section="exports">📥 Export Data</a>
     </div>
     <div class="nav-divider"></div>
     <div class="nav-section settings-section">
       <div class="nav-section-label"><span class="dot"></span>Settings</div>
+      <a data-section="clients">👥 Clients</a>
       <a data-section="settings">🔑 Settings</a>
+      <a data-section="health">🩺 Health Check</a>
+      <a data-section="dns-checker">🔎 DNS Checker</a>
+      <a data-section="backup">💾 Backup &amp; Restore</a>
+      <a data-section="error-log" style="display:flex;align-items:center;justify-content:space-between">
+        <span>🪲 Error Log</span>
+        <span id="error-log-badge" style="display:none;background:#dc2626;color:#fff;border-radius:10px;font-size:10px;font-weight:700;padding:1px 6px;min-width:18px;text-align:center"></span>
+      </a>
     </div>
   </nav>
 </div>
@@ -49,7 +61,31 @@
 <div id="main">
   <div id="topbar">
     <div class="title">Email System — <span>Local GTM Stack</span></div>
+    <!-- Client Switcher -->
+    <div id="client-switcher" style="position:relative;display:flex;align-items:center;gap:8px">
+      <div id="client-switcher-pill" onclick="toggleClientDropdown()" style="display:flex;align-items:center;gap:8px;cursor:pointer;background:#1f2937;border:1px solid #374151;border-radius:8px;padding:6px 12px;font-size:13px;color:#e5e7eb;user-select:none">
+        <span id="client-color-dot" style="width:8px;height:8px;border-radius:50%;background:#6366f1;flex-shrink:0"></span>
+        <span id="client-switcher-name">Loading…</span>
+        <span style="color:#6b7280;font-size:10px;margin-left:2px">▼</span>
+      </div>
+      <div id="client-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);right:0;min-width:240px;background:#111827;border:1px solid #374151;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.5);z-index:500;overflow:hidden">
+        <div style="padding:8px 12px;font-size:11px;font-weight:700;color:#4b5563;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #1f2937">Switch Client</div>
+        <div id="client-dropdown-list" style="max-height:260px;overflow-y:auto;padding:4px 0"></div>
+        <div style="border-top:1px solid #1f2937;padding:4px 0">
+          <div onclick="navigate('clients');closeClientDropdown()" style="display:flex;align-items:center;gap:8px;padding:9px 14px;font-size:13px;color:#818cf8;cursor:pointer;transition:background .15s" onmouseover="this.style.background='#1f2937'" onmouseout="this.style.background=''">
+            <span>⚙</span> Manage Clients
+          </div>
+          <div onclick="showAddClientFromSwitcher();closeClientDropdown()" style="display:flex;align-items:center;gap:8px;padding:9px 14px;font-size:13px;color:#4ade80;cursor:pointer;transition:background .15s" onmouseover="this.style.background='#1f2937'" onmouseout="this.style.background=''">
+            <span>+</span> Add New Client
+          </div>
+        </div>
+      </div>
+    </div>
     <button class="btn btn-ghost" onclick="logout()">Logout</button>
+  </div>
+  <!-- Client context breadcrumb -->
+  <div id="client-breadcrumb" style="display:none;background:#111827;border-bottom:1px solid #1f2937;padding:4px 20px;font-size:11px;color:#6b7280">
+    Viewing campaigns and data for <span id="client-breadcrumb-name" style="color:#a5b4fc;font-weight:600"></span>
   </div>
 
   <div id="content">
@@ -58,7 +94,7 @@
     <div id="section-warmup-dashboard" class="section">
       <div class="section-header">
         <div style="display:flex;align-items:center;gap:12px">
-          <div class="section-title">Warmup Dashboard</div>
+          <div class="section-title">Warmup Dashboard <span id="wd-client-name" style="font-size:14px;font-weight:400;color:#6b7280"></span></div>
           <span id="wd-status-badge"></span>
         </div>
         <span class="text-muted" id="wd-refresh"></span>
@@ -204,7 +240,10 @@
     <!-- CAMPAIGN DASHBOARD -->
     <div id="section-campaign-dashboard" class="section">
       <div class="section-header">
-        <div class="section-title">Campaign Dashboard</div>
+        <div style="display:flex;align-items:center">
+          <div class="section-title">Campaign Dashboard<span id="cd-client-name" style="font-size:14px;font-weight:400;color:#6b7280;margin-left:10px"></span></div>
+          <span id="health-quick-dot" title="Checking system health…" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#6b7280;margin-left:8px;vertical-align:middle;flex-shrink:0;cursor:pointer" onclick="navigate('health')"></span>
+        </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
           <div style="display:flex;gap:8px;align-items:center">
             <button id="run-now-btn" class="btn btn-primary" onclick="runAllNow()"><span id="run-spinner"></span> Run Campaign Now</button>
@@ -214,6 +253,7 @@
           <span style="font-size:11px;color:#888;text-align:right;max-width:300px">Sends pending emails, checks replies, syncs to HubSpot. (Campaigns only)</span>
         </div>
       </div>
+      <div id="cd-bounce-warning"></div>
       <div class="stat-grid" id="cd-stat-grid"><div class="loading"><span class="spinner"></span></div></div>
       <div class="card" style="margin-top:4px">
         <h3>Leads by Status</h3>
@@ -279,6 +319,7 @@
             <span id="warmup-status-badge"></span>
           </div>
           <div style="font-size:12px;color:#6b7280;margin-top:3px">Warmup emails send randomly during US Eastern business hours · Mon–Fri 8am–6pm · natural irregular patterns</div>
+          <div id="warmup-accounts-client-note" style="font-size:12px;color:#818cf8;margin-top:4px"></div>
         </div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-success" onclick="startWarmup()">▶ Start Warmup</button>
@@ -340,6 +381,7 @@
                 <div class="form-group"><label>App Password</label><input id="wa-pass" type="password" placeholder="xxxx xxxx xxxx xxxx"></div>
               </div>
               <button class="btn btn-primary btn-sm" onclick="addWarmupAccount()">+ Add Account</button>
+              <div id="warmup-add-client-note" style="font-size:11px;color:#6b7280;margin-top:8px"></div>
             </div>
           </div>
         </div>
@@ -517,6 +559,7 @@ Replace sender@gmail.com and receiver@gmail.com with two different email address
         <div class="card" style="margin-bottom:14px;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <button class="btn btn-primary btn-sm" onclick="processQueueNow()" id="rq-process-btn" style="background:#4338ca;border-color:#4338ca">⚡ Process Queue Now</button>
           <button class="btn btn-ghost btn-sm" onclick="clearSentQueue()" style="border-color:#ef4444;color:#ef4444">🗑 Clear Sent</button>
+          <button class="btn btn-ghost btn-sm" onclick="clearFailedQueue()" style="border-color:#f97316;color:#f97316">🗑 Clear Failed</button>
           <button class="btn btn-ghost btn-sm" onclick="loadReplyQueue()">↻ Refresh</button>
           <select id="rq-status-filter" onchange="loadReplyQueue()" style="margin-left:auto">
             <option value="">All Statuses</option>
@@ -534,6 +577,64 @@ Replace sender@gmail.com and receiver@gmail.com with two different email address
     </div>
 
     <!-- CAMPAIGNS -->
+    <!-- ANALYTICS -->
+    <div id="section-analytics" class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Campaign Analytics</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:2px">Visual performance data for your email campaigns</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="analytics-days" onchange="changeDays()" style="width:120px">
+            <option value="7">7 days</option>
+            <option value="14" selected>14 days</option>
+            <option value="30">30 days</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="loadAnalytics()">↻ Refresh</button>
+          <button class="btn btn-ghost btn-sm" onclick="exportAnalyticsCSV()">⬇ Export CSV</button>
+        </div>
+      </div>
+
+      <!-- Summary stats -->
+      <div id="an-summary-stats" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"></div>
+
+      <!-- Row 1: Daily Activity -->
+      <div class="card" style="margin-bottom:16px">
+        <div style="font-weight:700;font-size:14px;margin-bottom:14px">Daily Campaign Activity</div>
+        <div id="an-daily-wrap" style="position:relative;height:260px"><div class="loading"><span class="spinner"></span></div></div>
+      </div>
+
+      <!-- Row 2: Comparison + Step Performance -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div class="card">
+          <div style="font-weight:700;font-size:14px;margin-bottom:14px">Campaign Comparison</div>
+          <div id="an-comparison-wrap" style="position:relative;min-height:200px"><div class="loading"><span class="spinner"></span></div></div>
+        </div>
+        <div class="card">
+          <div style="font-weight:700;font-size:14px;margin-bottom:14px">Sequence Step Performance</div>
+          <div id="an-step-wrap" style="position:relative;min-height:200px"><div class="loading"><span class="spinner"></span></div></div>
+        </div>
+      </div>
+
+      <!-- Row 3: Hourly Pattern + Pipeline -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div class="card">
+          <div style="font-weight:700;font-size:14px;margin-bottom:14px">Sending Hours Pattern</div>
+          <div id="an-hourly-wrap" style="position:relative;min-height:200px"><div class="loading"><span class="spinner"></span></div></div>
+        </div>
+        <div class="card">
+          <div style="font-weight:700;font-size:14px;margin-bottom:14px">Lead Pipeline Status</div>
+          <div id="an-pipeline-wrap" style="position:relative;min-height:200px"><div class="loading"><span class="spinner"></span></div></div>
+        </div>
+      </div>
+
+      <!-- Row 4: Top Subject Lines -->
+      <div class="card">
+        <div style="font-weight:700;font-size:14px;margin-bottom:14px">Top Performing Subject Lines</div>
+        <div id="an-top-subjects"><div style="color:#6b7280;text-align:center;padding:20px">Load analytics to see subject line performance</div></div>
+      </div>
+    </div>
+
     <div id="section-campaigns" class="section">
       <div class="section-header">
         <div class="section-title">Campaigns</div>
@@ -560,6 +661,12 @@ Replace sender@gmail.com and receiver@gmail.com with two different email address
           <div class="form-group" style="max-width:110px"><label>Start Hour</label><input id="cf-start" type="number" value="9" min="0" max="23"></div>
           <div class="form-group" style="max-width:110px"><label>End Hour</label><input id="cf-end" type="number" value="17" min="0" max="23"></div>
         </div>
+        <div style="margin-bottom:12px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="cf-timezone-aware">
+            🕐 Timezone-aware sending (send emails at each lead's local time using their detected timezone)
+          </label>
+        </div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-primary" onclick="saveCampaign()">Save Campaign</button>
           <button class="btn btn-ghost" onclick="toggleCreateCampaign()">Cancel</button>
@@ -578,21 +685,182 @@ Replace sender@gmail.com and receiver@gmail.com with two different email address
           <select id="leads-campaign-filter" onchange="loadLeads()" style="width:180px">
             <option value="">All Campaigns</option>
           </select>
+          <button id="detect-tz-btn" class="btn btn-ghost btn-sm" onclick="detectAllTimezones()">🌍 Detect Timezones</button>
+          <button class="btn btn-ghost btn-sm" onclick="showUnsubscribeLog()">🛡 Unsubscribe Log</button>
           <button class="btn btn-primary" onclick="openImportPanel()">Import CSV</button>
         </div>
       </div>
-      <div id="lead-stats" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>
+      <div id="lead-stats" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"></div>
+      <div id="lead-validation-stats" style="display:none;font-size:12px;color:#6b7280;margin-bottom:10px;display:flex;gap:16px;align-items:center"></div>
       <div class="card" style="padding:0;overflow:hidden">
         <div style="padding:12px 16px;border-bottom:1px solid #333;display:flex;gap:8px;align-items:center">
           <div class="search-bar" style="max-width:260px;flex:1"><input id="lead-search" placeholder="Search name, email, company…" oninput="filterLeads()"></div>
+          <select id="lead-status-filter" onchange="filterLeads()" style="width:140px">
+            <option value="">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="finished">Finished</option>
+            <option value="replied">Replied</option>
+            <option value="bounced">Bounced</option>
+            <option value="unsubscribed">Unsubscribed</option>
+          </select>
         </div>
         <div class="table-wrap" id="leads-table"></div>
       </div>
     </div>
 
+    <!-- Unsubscribe Log Modal -->
+    <div id="unsub-log-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.7);align-items:center;justify-content:center">
+      <div style="background:#1a1a1a;border:1px solid #333;border-radius:10px;width:90%;max-width:780px;max-height:80vh;display:flex;flex-direction:column">
+        <div style="padding:16px 20px;border-bottom:1px solid #333;display:flex;align-items:center;justify-content:space-between">
+          <div style="font-weight:700;font-size:15px">🛡 Unsubscribe Log</div>
+          <button class="btn btn-ghost btn-sm" onclick="closeUnsubscribeLog()">✕</button>
+        </div>
+        <div id="unsub-log-body" style="overflow-y:auto;padding:16px;flex:1">
+          <div style="color:#6b7280;text-align:center;padding:20px">Loading…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Timezone Edit Modal -->
+    <div id="timezone-edit-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.7);align-items:center;justify-content:center">
+      <div style="background:#1a1a1a;border:1px solid #333;border-radius:10px;width:90%;max-width:480px">
+        <div style="padding:16px 20px;border-bottom:1px solid #333;display:flex;align-items:center;justify-content:space-between">
+          <div style="font-weight:700;font-size:15px">🕐 Edit Lead Timezone</div>
+          <button class="btn btn-ghost btn-sm" onclick="closeTimezoneEdit()">✕</button>
+        </div>
+        <div style="padding:20px;display:flex;flex-direction:column;gap:14px">
+          <input type="hidden" id="tz-lead-id">
+          <div class="form-group">
+            <label>UTC Offset (e.g. -5 for US Eastern, 5.5 for India)</label>
+            <input id="tz-offset" type="number" step="0.5" min="-12" max="14" placeholder="-5">
+          </div>
+          <div class="form-group">
+            <label>Timezone Label</label>
+            <input id="tz-label" placeholder="US Eastern (UTC-5)">
+          </div>
+          <div class="form-group">
+            <label>Optimal Send Hour (local, 0–23)</label>
+            <input id="tz-optimal-hour" type="number" min="0" max="23" value="9">
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-primary btn-sm" onclick="saveTimezoneEdit()">Save</button>
+            <button class="btn btn-ghost btn-sm" onclick="closeTimezoneEdit()">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BLACKLIST MANAGEMENT -->
+    <div id="section-blacklist" class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Blacklist Management</div>
+          <div class="text-muted" style="font-size:13px;margin-top:2px">Block specific emails and domains from receiving campaign emails.</div>
+        </div>
+        <button class="btn btn-ghost" onclick="loadBlacklist()">↻ Refresh</button>
+      </div>
+
+      <!-- Stats row -->
+      <div class="stat-grid" id="bl-stats" style="grid-template-columns:repeat(4,1fr);margin-bottom:4px">
+        <div class="stat-card"><div class="label">Total Blocked</div><div class="value" id="bl-stat-total">—</div></div>
+        <div class="stat-card"><div class="label">Emails Blocked</div><div class="value" id="bl-stat-emails">—</div></div>
+        <div class="stat-card"><div class="label">Domains Blocked</div><div class="value" id="bl-stat-domains">—</div></div>
+        <div class="stat-card"><div class="label">Auto Added by System</div><div class="value" id="bl-stat-auto">—</div></div>
+      </div>
+
+      <div class="two-col" style="margin-bottom:4px">
+        <!-- Quick Check -->
+        <div class="card">
+          <h3>Quick Check</h3>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="bl-check-input" placeholder="Enter email to check" style="flex:1" oninput="document.getElementById('bl-check-result').innerHTML=''">
+            <button class="btn btn-primary btn-sm" onclick="checkBlacklistEmail()">Check</button>
+          </div>
+          <div id="bl-check-result" style="margin-top:10px;font-size:13px"></div>
+        </div>
+
+        <!-- Add to Blacklist -->
+        <div class="card">
+          <h3>Add to Blacklist</h3>
+          <div class="form-row">
+            <div class="form-group" style="max-width:160px">
+              <label>Type</label>
+              <select id="bl-add-type">
+                <option value="email">Email Address</option>
+                <option value="domain">Domain</option>
+              </select>
+            </div>
+            <div class="form-group" style="flex:1">
+              <label>Value</label>
+              <input id="bl-add-value" placeholder="email@example.com or example.com">
+            </div>
+            <div class="form-group" style="flex:1">
+              <label>Reason (optional)</label>
+              <input id="bl-add-reason" placeholder="Why is this blocked?">
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="addToBlacklistUI()">+ Add to Blacklist</button>
+        </div>
+      </div>
+
+      <!-- Bulk Import -->
+      <div class="card" style="margin-bottom:4px">
+        <h3>Bulk Import</h3>
+        <div style="font-size:12px;color:#6b7280;margin-bottom:8px">
+          Paste CSV with columns: <code style="background:#1a1a1a;padding:1px 5px;border-radius:3px">value,type,reason</code>
+          &nbsp;Example: <code style="background:#1a1a1a;padding:1px 5px;border-radius:3px">badactor.com,domain,Spam reports</code>
+        </div>
+        <textarea id="bl-bulk-csv" rows="5" placeholder="value,type,reason&#10;badactor.com,domain,Spam reports&#10;spam@test.com,email,Known spammer" style="width:100%;font-family:monospace;font-size:12px;background:#111;border:1px solid #333;color:#e5e7eb;border-radius:6px;padding:8px;resize:vertical"></textarea>
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+          <button class="btn btn-primary btn-sm" onclick="bulkImportBlacklist()">Import Blacklist</button>
+        </div>
+        <div id="bl-bulk-result" style="margin-top:10px"></div>
+      </div>
+
+      <!-- Blacklist Table -->
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid #222;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+          <h3 style="margin:0">Current Blacklist</h3>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select id="bl-filter-type" onchange="filterBlacklist()" style="font-size:12px">
+              <option value="">All Types</option>
+              <option value="email">Email</option>
+              <option value="domain">Domain</option>
+            </select>
+            <input id="bl-filter-search" placeholder="Search value…" oninput="filterBlacklist()" style="font-size:12px;width:160px">
+            <label style="font-size:12px;color:#9ca3af;display:flex;align-items:center;gap:5px;cursor:pointer">
+              <input type="checkbox" id="bl-show-deactivated" onchange="filterBlacklist()"> Show Deactivated
+            </label>
+            <button class="btn btn-ghost btn-sm" onclick="exportBlacklistCSV()">↓ Export CSV</button>
+          </div>
+        </div>
+        <div class="table-wrap" id="bl-table"><div class="loading"><span class="spinner"></span></div></div>
+        <div style="padding:12px 20px;border-top:1px solid #222;display:flex;align-items:center;justify-content:space-between">
+          <button class="btn btn-ghost btn-sm" id="bl-prev-btn" onclick="paginateBlacklist(-1)">← Previous</button>
+          <span id="bl-page-indicator" style="font-size:12px;color:#9ca3af"></span>
+          <button class="btn btn-ghost btn-sm" id="bl-next-btn" onclick="paginateBlacklist(1)">Next →</button>
+        </div>
+      </div>
+
+      <!-- Integration Notice -->
+      <div class="card" style="margin-top:4px;border-color:#2a2a2a;background:#0d0d0d">
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <span style="font-size:20px">🛡</span>
+          <div style="font-size:13px;color:#9ca3af;line-height:1.7">
+            <strong style="color:#e5e7eb">Blacklist is automatically checked before every campaign email is sent.</strong>
+            Bounced emails are automatically added to the blacklist.
+            Unsubscribed lead domains are <em>not</em> automatically blacklisted — one person opting out does not mean the entire domain should be blocked.
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- SENDING ACCOUNTS -->
     <div id="section-sending-accounts" class="section">
-      <div class="section-header"><div class="section-title">Sending Accounts</div></div>
+      <div class="section-header">
+        <div class="section-title">Sending Accounts</div>
+        <button id="bounce-check-btn" class="btn btn-ghost btn-sm" onclick="runBounceCheck()">Run Bounce Check</button>
+      </div>
       <div class="card">
         <h3>Add Sending Account</h3>
         <div class="form-row">
@@ -606,6 +874,312 @@ Replace sender@gmail.com and receiver@gmail.com with two different email address
       <div class="card" style="padding:0;overflow:hidden">
         <div class="table-wrap" id="accounts-table"></div>
       </div>
+    </div>
+
+    <!-- BOUNCE HISTORY MODAL -->
+    <div id="bounce-history-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center">
+      <div style="background:#1a1a1a;border:1px solid #333;border-radius:10px;padding:24px;max-width:780px;width:95%;max-height:85vh;overflow-y:auto;position:relative">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <div>
+            <div style="font-size:16px;font-weight:700;color:#e5e7eb">Bounce History</div>
+            <div id="bounce-history-email" style="font-size:12px;color:#6b7280;font-family:monospace;margin-top:2px"></div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="closeBounceHistory()">✕ Close</button>
+        </div>
+        <div id="bounce-history-body"></div>
+      </div>
+    </div>
+
+    <!-- DNS CHECKER -->
+    <div id="section-dns-checker" class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">DNS Record Checker</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:3px">Verify your sending domain is properly configured before launching campaigns</div>
+        </div>
+      </div>
+
+      <!-- Why This Matters -->
+      <div class="card" style="border:1px solid #1f2937;margin-bottom:16px">
+        <div style="font-weight:700;font-size:13px;color:#9ca3af;margin-bottom:10px">WHY THIS MATTERS</div>
+        <ul style="margin:0;padding-left:18px;list-style:disc;display:flex;flex-direction:column;gap:7px">
+          <li style="font-size:13px;color:#d1d5db"><strong style="color:#e5e7eb">SPF</strong> tells email providers which servers are allowed to send from your domain.</li>
+          <li style="font-size:13px;color:#d1d5db"><strong style="color:#e5e7eb">DKIM</strong> adds a digital signature proving emails are genuine and haven't been tampered with.</li>
+          <li style="font-size:13px;color:#d1d5db"><strong style="color:#e5e7eb">DMARC</strong> tells providers what to do with emails that fail SPF or DKIM checks.</li>
+          <li style="font-size:13px;color:#d1d5db">Without all three your emails are significantly more likely to land in spam.</li>
+        </ul>
+      </div>
+
+      <!-- Check form -->
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <div style="flex:1;min-width:220px">
+            <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:6px">Domain to check</label>
+            <input id="dns-domain-input" placeholder="e.g. yourdomain.com" style="width:100%;box-sizing:border-box" onkeydown="if(event.key==='Enter')runDNSCheck()">
+          </div>
+          <button id="dns-check-btn" class="btn btn-primary" onclick="runDNSCheck()" style="background:#4338ca;border-color:#4338ca;white-space:nowrap">
+            <span id="dns-check-spinner"></span> Check DNS Records
+          </button>
+        </div>
+        <!-- Quick check buttons -->
+        <div style="margin-top:12px">
+          <div style="font-size:11px;color:#6b7280;margin-bottom:8px">Quick check:</div>
+          <div id="dns-quick-btns" style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="checkDomainQuick('gmail.com')">gmail.com</button>
+            <button class="btn btn-ghost btn-sm" onclick="checkDomainQuick('outlook.com')">outlook.com</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div id="dns-results" style="display:none">
+        <!-- Score banner -->
+        <div id="dns-score-banner" style="margin-bottom:16px"></div>
+        <!-- Four record cards -->
+        <div id="dns-record-cards" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px"></div>
+        <!-- Recommendations -->
+        <div id="dns-recommendations" style="margin-bottom:16px"></div>
+      </div>
+
+      <!-- History -->
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="padding:12px 16px;border-bottom:1px solid #333;font-weight:600;font-size:13px">Check History</div>
+        <div class="table-wrap" id="dns-history-table"></div>
+      </div>
+    </div>
+
+    <!-- HEALTH CHECK -->
+    <div id="section-health" class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">System Health Check</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:3px">Real time status of all system components</div>
+        </div>
+      </div>
+
+      <!-- Controls row -->
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:16px">
+          <span style="font-size:12px;color:#6b7280">Checked: <span id="health-last-checked" style="color:#9ca3af">never</span></span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" id="health-autorefresh-btn" onclick="toggleAutoRefresh()">▶ Auto Refresh (60s)</button>
+          <button class="btn btn-primary btn-sm" onclick="loadHealthCheck()" style="background:#4338ca;border-color:#4338ca">↻ Refresh Now</button>
+        </div>
+      </div>
+
+      <!-- Overall status banner -->
+      <div id="health-overall-banner" style="padding:12px 18px;border-radius:8px;background:#1f2937;border:1px solid #374151;color:#9ca3af;font-weight:700;font-size:14px;margin-bottom:16px">
+        ⏳ Loading health status…
+      </div>
+
+      <!-- Cards grid -->
+      <div id="health-cards-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
+        <!-- populated by JS -->
+      </div>
+
+      <!-- Raw JSON collapsible -->
+      <div class="card">
+        <button onclick="toggleHealthRaw()" style="width:100%;background:none;border:none;text-align:left;cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:0">
+          <h3 style="margin:0;font-size:13px;color:#6b7280">🔍 Last Check Details (Raw JSON)</h3>
+          <span id="health-raw-arrow" style="color:#6b7280;font-size:12px">▶ Show</span>
+        </button>
+        <div id="health-raw-body" style="display:none;margin-top:14px">
+          <pre id="health-raw-json" style="font-size:11px;color:#9ca3af;background:#0f1a27;padding:14px;border-radius:8px;overflow:auto;max-height:400px;white-space:pre-wrap;word-break:break-all"></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- BACKUP AND RESTORE -->
+    <div id="section-backup" class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Backup and Restore</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:3px">Protect your data with automatic daily backups</div>
+        </div>
+      </div>
+
+      <!-- Warning banner -->
+      <div style="padding:12px 16px;border-radius:8px;background:#2d1a00;border:1px solid #92400e;color:#fcd34d;font-size:12px;margin-bottom:16px;display:flex;gap:10px;align-items:flex-start">
+        <span style="font-size:16px;flex-shrink:0">⚠️</span>
+        <div><strong>Restoring a backup will replace all current data.</strong> A safety backup is created automatically before any restore. This action cannot be undone.</div>
+      </div>
+
+      <!-- Stats row -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+        <div class="card" style="padding:14px">
+          <div style="font-size:11px;color:#9ca3af;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Total Backups</div>
+          <div id="bk-stat-total" style="font-size:28px;font-weight:800;color:#e5e7eb">—</div>
+        </div>
+        <div class="card" style="padding:14px">
+          <div style="font-size:11px;color:#9ca3af;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Total Size</div>
+          <div id="bk-stat-size" style="font-size:28px;font-weight:800;color:#e5e7eb">—</div>
+        </div>
+        <div class="card" style="padding:14px">
+          <div style="font-size:11px;color:#9ca3af;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Newest Backup</div>
+          <div id="bk-stat-newest" style="font-size:22px;font-weight:800;color:#e5e7eb">—</div>
+        </div>
+        <div class="card" style="padding:14px">
+          <div style="font-size:11px;color:#9ca3af;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Auto Backup</div>
+          <div id="bk-stat-auto" style="font-size:18px;font-weight:700;color:#e5e7eb">—</div>
+        </div>
+      </div>
+
+      <!-- Manual backup card -->
+      <div class="card" style="margin-bottom:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+          <div>
+            <h3 style="margin:0 0 4px">Create Backup Now</h3>
+            <div style="font-size:12px;color:#6b7280">Immediately back up your current database to the backups folder</div>
+          </div>
+          <button id="bk-create-btn" class="btn btn-primary" onclick="createBackupNow()" style="background:#4338ca;border-color:#4338ca">💾 Create Backup Now</button>
+        </div>
+        <div id="bk-create-result"></div>
+
+        <!-- Auto backup toggle -->
+        <div style="display:flex;align-items:center;gap:12px;margin-top:16px;padding-top:16px;border-top:1px solid #1f2937;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="bk-auto-toggle" onchange="toggleAutoBackup()" style="width:16px;height:16px;cursor:pointer">
+            <span style="font-size:13px;color:#e5e7eb">Automatic daily backup at 1am UTC (6am PKT)</span>
+          </label>
+          <span id="bk-auto-badge" style="font-size:12px;font-weight:700;color:#4ade80">Enabled</span>
+        </div>
+      </div>
+
+      <!-- Backup list card -->
+      <div class="card" style="margin-bottom:14px;padding:0">
+        <div style="padding:14px 16px;border-bottom:1px solid #1f2937;display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <h3 style="margin:0 0 2px">Your Backups</h3>
+            <div style="font-size:12px;color:#6b7280">Last 7 backups are kept automatically</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="loadBackups()">↻ Refresh</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse">
+            <thead>
+              <tr style="border-bottom:1px solid #1f2937">
+                <th style="padding:10px;text-align:left;font-size:11px;color:#6b7280;font-weight:600">Filename</th>
+                <th style="padding:10px;text-align:left;font-size:11px;color:#6b7280;font-weight:600">Size</th>
+                <th style="padding:10px;text-align:left;font-size:11px;color:#6b7280;font-weight:600">Created</th>
+                <th style="padding:10px;text-align:left;font-size:11px;color:#6b7280;font-weight:600">Note</th>
+                <th style="padding:10px;text-align:left;font-size:11px;color:#6b7280;font-weight:600">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="backup-list-table">
+              <tr><td colspan="5" style="padding:30px;text-align:center"><span class="spinner"></span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Restore confirmation modal -->
+    <div id="bk-restore-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center">
+      <div style="background:#1a2332;border-radius:12px;padding:24px;max-width:480px;width:90%;border:1px solid #374151">
+        <div style="font-size:16px;font-weight:700;color:#e5e7eb;margin-bottom:12px">↩ Restore Backup</div>
+        <div style="font-size:12px;color:#9ca3af;margin-bottom:8px">You are about to restore from:</div>
+        <div id="bk-restore-modal-name" style="font-family:monospace;font-size:11px;color:#fbbf24;background:#0f1a27;padding:8px 10px;border-radius:6px;margin-bottom:14px;word-break:break-all"></div>
+        <div style="font-size:12px;color:#fcd34d;background:#2d1a00;border:1px solid #92400e;border-radius:6px;padding:10px 12px;margin-bottom:16px;line-height:1.6">
+          This will <strong>replace all current data</strong> with data from that backup. Your current database will be automatically saved as a safety backup before restoring.
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button onclick="hideRestoreModal()" class="btn btn-ghost">Cancel</button>
+          <button onclick="confirmRestore()" style="background:#dc2626;border:1px solid #dc2626;color:#fff;border-radius:8px;padding:8px 18px;cursor:pointer;font-size:13px;font-weight:600">Yes, Restore</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Restore loading overlay -->
+    <div id="bk-restore-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:1001;align-items:center;justify-content:center;flex-direction:column;gap:16px">
+      <span class="spinner" style="width:40px;height:40px;border-width:4px"></span>
+      <div style="color:#e5e7eb;font-size:15px;font-weight:600">Restoring database… please wait</div>
+    </div>
+
+    <!-- ERROR LOG -->
+    <div id="section-error-log" class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Error Log</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:3px">System errors and warnings captured automatically</div>
+        </div>
+        <div style="font-size:11px;color:#6b7280">Updated: <span id="error-log-last-updated">—</span></div>
+      </div>
+
+      <!-- Stat boxes -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+        <div class="card" style="padding:14px;cursor:pointer;border-color:#7f1d1d" onclick="filterBySeverity('critical')">
+          <div style="font-size:11px;color:#9ca3af;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Critical</div>
+          <div id="err-stat-critical" style="font-size:28px;font-weight:800;color:#f87171">0</div>
+        </div>
+        <div class="card" style="padding:14px;cursor:pointer;border-color:#9a3412" onclick="filterBySeverity('error')">
+          <div style="font-size:11px;color:#9ca3af;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Errors</div>
+          <div id="err-stat-error" style="font-size:28px;font-weight:800;color:#fb923c">0</div>
+        </div>
+        <div class="card" style="padding:14px;cursor:pointer;border-color:#92400e" onclick="filterBySeverity('warning')">
+          <div style="font-size:11px;color:#9ca3af;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Warnings</div>
+          <div id="err-stat-warning" style="font-size:28px;font-weight:800;color:#fbbf24">0</div>
+        </div>
+        <div class="card" style="padding:14px;cursor:pointer;border-color:#374151" onclick="filterBySeverity('info')">
+          <div style="font-size:11px;color:#9ca3af;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Info</div>
+          <div id="err-stat-info" style="font-size:28px;font-weight:800;color:#9ca3af">0</div>
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="card" style="margin-bottom:14px;padding:12px 16px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <select id="err-filter-severity" onchange="filterErrors()" style="width:160px">
+            <option value="">All Severities</option>
+            <option value="critical">Critical</option>
+            <option value="error">Error</option>
+            <option value="warning">Warning</option>
+            <option value="info">Info</option>
+          </select>
+          <select id="err-filter-type" onchange="filterErrors()" style="width:160px">
+            <option value="">All Types</option>
+            <option value="smtp">SMTP</option>
+            <option value="imap">IMAP</option>
+            <option value="hubspot">HubSpot</option>
+            <option value="scheduler">Scheduler</option>
+            <option value="warmup">Warmup</option>
+            <option value="campaign">Campaign</option>
+            <option value="system">System</option>
+          </select>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#9ca3af;cursor:pointer">
+            <input type="checkbox" id="err-filter-resolved" onchange="filterErrors()"> Show Resolved
+          </label>
+          <div style="display:flex;gap:8px;margin-left:auto">
+            <button class="btn btn-ghost btn-sm" onclick="resolveAllErrors()" style="border-color:#16a34a;color:#4ade80">✓ Resolve All</button>
+            <button class="btn btn-ghost btn-sm" onclick="clearResolvedErrorsUI()" style="border-color:#ef4444;color:#ef4444">🗑 Clear Resolved</button>
+            <button class="btn btn-ghost btn-sm" onclick="loadErrorLog()">↻ Refresh</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="card" style="margin-bottom:14px;padding:0">
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse">
+            <thead>
+              <tr style="border-bottom:1px solid #1f2937">
+                <th style="padding:10px 10px;text-align:left;font-size:11px;color:#6b7280;font-weight:600">Severity</th>
+                <th style="padding:10px 10px;text-align:left;font-size:11px;color:#6b7280;font-weight:600">Type</th>
+                <th style="padding:10px 10px;text-align:left;font-size:11px;color:#6b7280;font-weight:600">Message</th>
+                <th style="padding:10px 10px;text-align:left;font-size:11px;color:#6b7280;font-weight:600">Time</th>
+                <th style="padding:10px 10px;text-align:left;font-size:11px;color:#6b7280;font-weight:600">Context</th>
+                <th style="padding:10px 10px;text-align:left;font-size:11px;color:#6b7280;font-weight:600">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="error-log-table">
+              <tr><td colspan="6" style="padding:30px;text-align:center"><span class="spinner"></span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Pagination -->
+      <div id="error-log-pagination"></div>
     </div>
 
     <!-- SETTINGS -->
@@ -666,6 +1240,25 @@ Replace sender@gmail.com and receiver@gmail.com with two different email address
               <span id="notif-summary-knob" style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .2s"></span>
             </button>
           </div>
+        </div>
+
+        <!-- Reply notifications toggle -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-top:1px solid #1f2937">
+          <div>
+            <div style="font-size:13px;font-weight:600;color:#e5e7eb">Reply Notifications</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px">Instant email alert when a lead replies to your campaign</div>
+            <div style="font-size:11px;color:#4b5563;margin-top:4px">Sent immediately when a reply is detected · Rate limited to once per hour per lead</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span id="notif-reply-badge" style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:#1f2937;color:#6b7280">Disabled</span>
+            <button id="notif-reply-toggle" onclick="toggleReplyNotification()" style="position:relative;width:44px;height:24px;border-radius:999px;border:none;cursor:pointer;background:#374151;transition:background .2s">
+              <span id="notif-reply-knob" style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .2s"></span>
+            </button>
+          </div>
+        </div>
+        <div style="padding-bottom:14px;border-bottom:1px solid #1f2937">
+          <button id="test-reply-notif-btn" class="btn btn-ghost" style="border-color:#6366f1;color:#6366f1;font-size:12px;padding:4px 12px" onclick="sendTestReplyNotification()">Send Test Reply Notification</button>
+          <div id="notif-reply-result" style="font-size:13px;margin-top:8px"></div>
         </div>
 
         <!-- Warmup complete notification row -->
@@ -1642,6 +2235,10 @@ Replace sender@gmail.com and receiver@gmail.com with two different email address
                 <span style="color:#6366f1;font-size:14px;flex-shrink:0">▸</span>
                 <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">If no token is set:</strong> The system still sends emails and detects replies normally. HubSpot push is simply skipped. You can add the token at any time and it will apply to all future reply events.</p>
               </div>
+              <div style="display:flex;gap:10px">
+                <span style="color:#22c55e;font-size:14px;flex-shrink:0">▸</span>
+                <p style="margin:0;font-size:13px;line-height:1.6;color:#aaa"><strong style="color:#ddd">Instant reply notifications:</strong> When a lead replies, you receive an immediate email alert at your configured notification email address. The alert includes the lead's name, company, and a 300-character preview of their reply message. Two action buttons let you jump directly to HubSpot to manage the conversation or to the leads table in this dashboard. Enable this in Settings → Notification Settings → Reply Notifications.</p>
+              </div>
             </div>
           </div>
 
@@ -1649,6 +2246,310 @@ Replace sender@gmail.com and receiver@gmail.com with two different email address
       </div>
     </div>
 
+    <!-- CLIENT REPORTS -->
+    <div id="section-client-reports" class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Client Progress Reports</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:3px">Automated daily and weekly campaign updates sent to your clients</div>
+        </div>
+      </div>
+
+      <!-- How It Works -->
+      <div class="card" style="margin-bottom:16px">
+        <h3>How It Works</h3>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <div style="flex:1;min-width:160px;text-align:center;padding:16px">
+            <div style="font-size:28px;margin-bottom:8px">⚙</div>
+            <div style="font-size:13px;font-weight:600;color:#e5e7eb;margin-bottom:4px">1. Configure</div>
+            <div style="font-size:12px;color:#6b7280">Select which campaign and client email address to send reports to</div>
+          </div>
+          <div style="flex:1;min-width:160px;text-align:center;padding:16px">
+            <div style="font-size:28px;margin-bottom:8px">⏰</div>
+            <div style="font-size:13px;font-weight:600;color:#e5e7eb;margin-bottom:4px">2. Automated Sending</div>
+            <div style="font-size:12px;color:#6b7280">System automatically sends a daily update every morning at 8am Pakistan time</div>
+          </div>
+          <div style="flex:1;min-width:160px;text-align:center;padding:16px">
+            <div style="font-size:28px;margin-bottom:8px">📊</div>
+            <div style="font-size:13px;font-weight:600;color:#e5e7eb;margin-bottom:4px">3. Client Receives</div>
+            <div style="font-size:12px;color:#6b7280">Simple non-technical summary of campaign progress — no login required</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Configured Reports -->
+      <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px">
+        <div style="padding:16px 20px;border-bottom:1px solid #1f2937">
+          <h3 style="margin:0">Configured Reports</h3>
+        </div>
+        <div class="table-wrap" id="cr-table"><div class="loading"><span class="spinner"></span></div></div>
+      </div>
+
+      <!-- Add New Config Form -->
+      <div class="card">
+        <h3>Add New Report Configuration</h3>
+        <div class="form-row">
+          <div class="form-group" style="flex:2;min-width:180px">
+            <label>Campaign</label>
+            <select id="cr-campaign-select">
+              <option value="">— Select Campaign —</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:2;min-width:180px">
+            <label>Client Email</label>
+            <input id="cr-client-email" type="email" placeholder="client@company.com">
+          </div>
+          <div class="form-group" style="flex:1;min-width:140px">
+            <label>Client Name</label>
+            <input id="cr-client-name" type="text" placeholder="e.g. Sohrab">
+          </div>
+        </div>
+        <div class="form-row" style="align-items:center;gap:24px;margin-top:4px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:13px;color:#e5e7eb">Daily Report</span>
+            <button id="cr-daily-toggle" onclick="toggleCRDaily()" data-enabled="1" style="position:relative;width:44px;height:24px;border-radius:999px;border:none;cursor:pointer;background:#22c55e;transition:background .2s">
+              <span id="cr-daily-knob" style="position:absolute;top:3px;left:23px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .2s"></span>
+            </button>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:13px;color:#e5e7eb">Weekly Report</span>
+            <button id="cr-weekly-toggle" onclick="toggleCRWeekly()" data-enabled="1" style="position:relative;width:44px;height:24px;border-radius:999px;border:none;cursor:pointer;background:#22c55e;transition:background .2s">
+              <span id="cr-weekly-knob" style="position:absolute;top:3px;left:23px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .2s"></span>
+            </button>
+          </div>
+          <div class="form-group" style="max-width:200px;margin:0">
+            <label style="font-size:12px">Send Time (PKT)</label>
+            <select id="cr-send-hour">
+              <option value="6">6:00 AM</option>
+              <option value="7">7:00 AM</option>
+              <option value="8" selected>8:00 AM</option>
+              <option value="9">9:00 AM</option>
+              <option value="10">10:00 AM</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:16px">
+          <button class="btn btn-primary" onclick="saveClientReport()">Save Configuration</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CLIENT REPORTS PREVIEW MODAL -->
+    <div id="cr-preview-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:1000;align-items:flex-start;justify-content:center;overflow-y:auto;padding:24px 0">
+      <div style="background:#1a1a1a;border:1px solid #333;border-radius:10px;width:95%;max-width:680px;margin:auto;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid #333">
+          <div style="font-size:15px;font-weight:700;color:#e5e7eb">Email Preview — What the Client Will See</div>
+          <button class="btn btn-ghost btn-sm" onclick="closePreviewModal()">✕ Close</button>
+        </div>
+        <div id="cr-preview-frame" style="padding:0;background:#f3f4f6;min-height:400px"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+    <!-- EXPORTS -->
+    <div id="section-exports" class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Export Data</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:2px">Download your campaign and warmup data as CSV files</div>
+        </div>
+      </div>
+
+      <!-- Export cards grid -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;margin-bottom:20px">
+
+        <!-- Card 1: Leads -->
+        <div class="card">
+          <div style="font-weight:700;font-size:14px;margin-bottom:4px">📋 Export Leads</div>
+          <div style="font-size:12px;color:#6b7280;margin-bottom:12px">Download your complete leads list with status and performance data.</div>
+          <div id="exp-leads-hint" style="font-size:11px;color:#4b5563;margin-bottom:12px"></div>
+          <div class="form-group" style="margin-bottom:8px">
+            <label style="font-size:12px">Campaign</label>
+            <select id="exp-leads-campaign" style="font-size:13px"></select>
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label style="font-size:12px">Status</label>
+            <select id="exp-leads-status" style="font-size:13px">
+              <option value="">All Statuses</option>
+              <option value="active">Active</option>
+              <option value="replied">Replied</option>
+              <option value="finished">Finished</option>
+              <option value="bounced">Bounced</option>
+              <option value="unsubscribed">Unsubscribed</option>
+            </select>
+          </div>
+          <button id="exp-leads-btn" class="btn btn-primary btn-sm" style="width:100%" onclick="downloadLeads()">⬇ Download CSV</button>
+        </div>
+
+        <!-- Card 2: Sent Log -->
+        <div class="card">
+          <div style="font-weight:700;font-size:14px;margin-bottom:4px">📨 Export Sent Log</div>
+          <div style="font-size:12px;color:#6b7280;margin-bottom:12px">Download a record of every email sent including open tracking data.</div>
+          <div class="form-group" style="margin-bottom:8px">
+            <label style="font-size:12px">Campaign</label>
+            <select id="exp-sent-campaign" style="font-size:13px"></select>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+            <div class="form-group" style="margin:0">
+              <label style="font-size:12px">Date From</label>
+              <input id="exp-sent-from" type="date" style="font-size:13px">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label style="font-size:12px">Date To</label>
+              <input id="exp-sent-to" type="date" style="font-size:13px">
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label style="font-size:12px">Limit</label>
+            <select id="exp-sent-limit" style="font-size:13px">
+              <option value="500">500 rows</option>
+              <option value="1000" selected>1,000 rows</option>
+              <option value="5000">5,000 rows</option>
+              <option value="0">All rows</option>
+            </select>
+          </div>
+          <button id="exp-sent-btn" class="btn btn-primary btn-sm" style="width:100%" onclick="downloadSentLog()">⬇ Download CSV</button>
+        </div>
+
+        <!-- Card 3: Warmup Log -->
+        <div class="card">
+          <div style="font-weight:700;font-size:14px;margin-bottom:4px">🔥 Export Warmup Log</div>
+          <div style="font-size:12px;color:#6b7280;margin-bottom:12px">Download warmup email activity for reporting or analysis.</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+            <div class="form-group" style="margin:0">
+              <label style="font-size:12px">Date From</label>
+              <input id="exp-warmup-from" type="date" style="font-size:13px">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label style="font-size:12px">Date To</label>
+              <input id="exp-warmup-to" type="date" style="font-size:13px">
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label style="font-size:12px">Conversation ID (optional)</label>
+            <input id="exp-warmup-conv" placeholder="e.g. auto" style="font-size:13px">
+          </div>
+          <button id="exp-warmup-btn" class="btn btn-primary btn-sm" style="width:100%" onclick="downloadWarmupLog()">⬇ Download CSV</button>
+        </div>
+
+        <!-- Card 4: Replies -->
+        <div class="card">
+          <div style="font-weight:700;font-size:14px;margin-bottom:4px">💬 Export Replies</div>
+          <div style="font-size:12px;color:#6b7280;margin-bottom:12px">Download all leads who replied to your campaigns.</div>
+          <div style="flex:1"></div>
+          <button id="exp-replies-btn" class="btn btn-primary btn-sm" style="width:100%;margin-top:auto" onclick="downloadReplies()">⬇ Download CSV</button>
+        </div>
+
+        <!-- Card 5: Analytics -->
+        <div class="card">
+          <div style="font-weight:700;font-size:14px;margin-bottom:4px">📈 Export Analytics</div>
+          <div style="font-size:12px;color:#6b7280;margin-bottom:12px">Download daily performance metrics as a spreadsheet.</div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label style="font-size:12px">Days</label>
+            <select id="exp-analytics-days" style="font-size:13px">
+              <option value="7">7 days</option>
+              <option value="14">14 days</option>
+              <option value="30" selected>30 days</option>
+              <option value="60">60 days</option>
+              <option value="90">90 days</option>
+            </select>
+          </div>
+          <button id="exp-analytics-btn" class="btn btn-primary btn-sm" style="width:100%" onclick="downloadAnalytics()">⬇ Download CSV</button>
+        </div>
+
+      </div>
+
+      <!-- Quick Exports -->
+      <div class="card" style="margin-bottom:16px">
+        <div style="font-weight:700;font-size:14px;margin-bottom:12px">⚡ Quick Exports</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button id="qe-all-leads" class="btn btn-ghost btn-sm" onclick="quickExportAllLeads()">📋 All Leads</button>
+          <button id="qe-active-leads" class="btn btn-ghost btn-sm" onclick="quickExportActiveLeads()">✅ Active Leads Only</button>
+          <button id="qe-replied-leads" class="btn btn-ghost btn-sm" onclick="quickExportRepliedLeads()">💬 Replied Leads</button>
+          <button id="qe-recent-sent" class="btn btn-ghost btn-sm" onclick="quickExportRecentSentLog()">📨 Last 30 Days Sent Log</button>
+        </div>
+      </div>
+
+      <!-- Export History -->
+      <div class="card">
+        <div style="font-weight:700;font-size:14px;margin-bottom:12px">🕐 Export History <span style="font-size:11px;color:#4b5563;font-weight:400">(this session)</span></div>
+        <div id="exp-history-table"><div style="color:#6b7280;text-align:center;padding:16px;font-size:13px">No exports yet this session</div></div>
+      </div>
+    </div>
+
+<!-- CLIENTS SECTION -->
+<div id="section-clients" class="section">
+  <div class="section-header">
+    <div>
+      <div class="section-title">Client Management</div>
+      <div class="text-muted" style="font-size:13px;margin-top:2px">Manage multiple clients from a single system.</div>
+    </div>
+    <button class="btn btn-primary" onclick="showAddClientForm()" style="background:#4f46e5;border-color:#4f46e5">+ Add New Client</button>
+  </div>
+
+  <!-- Add New Client form card -->
+  <div id="add-client-form-card" class="card" style="display:none;margin-bottom:16px">
+    <h3 style="margin-top:0;color:#a5b4fc">Add New Client</h3>
+    <div class="two-col" style="gap:12px">
+      <div class="form-group">
+        <label>Client Name <span style="color:#ef4444">*</span></label>
+        <input id="new-client-name" type="text" placeholder="e.g. Acme Corp">
+      </div>
+      <div class="form-group">
+        <label>Contact Name</label>
+        <input id="new-client-contact-name" type="text" placeholder="e.g. Jane Smith">
+      </div>
+    </div>
+    <div class="two-col" style="gap:12px">
+      <div class="form-group">
+        <label>Contact Email</label>
+        <input id="new-client-contact-email" type="email" placeholder="jane@acmecorp.com">
+      </div>
+      <div class="form-group" style="position:relative">
+        <label>HubSpot Token</label>
+        <input id="new-client-hubspot-token" type="password" placeholder="pat-na1-…">
+        <button type="button" onclick="toggleClientTokenVisibility('new-client-hubspot-token')" style="position:absolute;right:10px;top:32px;background:none;border:none;color:#6b7280;cursor:pointer;font-size:12px">Show</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>HubSpot Portal ID</label>
+      <input id="new-client-portal-id" type="text" placeholder="e.g. 12345678">
+      <div style="font-size:11px;color:#6b7280;margin-top:4px">Find this in your HubSpot URL: app.hubspot.com/contacts/YOUR_PORTAL_ID</div>
+    </div>
+    <div class="form-group">
+      <label>Notes</label>
+      <textarea id="new-client-notes" rows="3" placeholder="Optional notes about this client…"></textarea>
+    </div>
+    <div class="form-group">
+      <label>Color</label>
+      <div id="new-client-color-picker" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px"></div>
+      <input id="new-client-color-value" type="hidden" value="#6366f1">
+    </div>
+    <div style="display:flex;gap:10px;margin-top:4px">
+      <button class="btn btn-primary" onclick="saveClient()" style="background:#4f46e5;border-color:#4f46e5">Save Client</button>
+      <button class="btn btn-ghost" onclick="hideAddClientForm()">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Clients grid -->
+  <div id="clients-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px">
+    <div class="loading"><span class="spinner"></span></div>
+  </div>
+</div>
+
+<!-- Client Stats Modal -->
+<div id="client-stats-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;overflow-y:auto;padding:40px 20px" onclick="closeClientStatsModal(event)">
+  <div style="max-width:640px;margin:0 auto;background:#111827;border:1px solid #1f2937;border-radius:10px;overflow:hidden" onclick="event.stopPropagation()">
+    <div style="padding:18px 24px;border-bottom:1px solid #1f2937;display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div id="client-stats-modal-name" style="font-size:16px;font-weight:700;color:#e5e7eb"></div>
+        <div style="font-size:12px;color:#6b7280;margin-top:2px">Client Performance Stats</div>
+      </div>
+      <button onclick="closeClientStatsModal()" style="background:none;border:none;color:#6b7280;font-size:18px;cursor:pointer;padding:4px">✕</button>
+    </div>
+    <div id="client-stats-modal-content" style="padding:24px"></div>
   </div>
 </div>
 
@@ -1656,17 +2557,38 @@ Replace sender@gmail.com and receiver@gmail.com with two different email address
 <div class="overlay" id="overlay" onclick="closeImportPanel()"></div>
 <div class="slide-panel" id="import-panel">
   <h2>Import CSV <span onclick="closeImportPanel()" style="cursor:pointer;color:#666;font-size:20px">×</span></h2>
-  <div class="form-group" style="margin-bottom:12px">
-    <label>Campaign</label>
-    <select id="import-campaign"></select>
-  </div>
-  <div class="form-group" style="margin-bottom:12px">
-    <label>CSV Content</label>
-    <textarea id="import-csv" rows="12" placeholder="first_name,last_name,email,company,website,personalized_line
+
+  <!-- Import form -->
+  <div id="import-form-view">
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Campaign</label>
+      <select id="import-campaign"></select>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>CSV Content</label>
+      <textarea id="import-csv" rows="10" placeholder="first_name,last_name,email,company,website,personalized_line
 John,Smith,john@acme.com,Acme,acme.com,Loved your recent blog post"></textarea>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn btn-ghost btn-sm" style="flex:1" onclick="validateCSV()">🔍 Validate Before Import</button>
+      <button class="btn btn-primary btn-sm" style="flex:1" onclick="importCSV()">Import Leads</button>
+    </div>
+    <div id="import-result" class="mt-16"></div>
   </div>
-  <button class="btn btn-primary" style="width:100%" onclick="importCSV()">Import Leads</button>
-  <div id="import-result" class="mt-16"></div>
+
+  <!-- Validation results view -->
+  <div id="import-validation-view" style="display:none">
+    <div id="validation-results-panel"></div>
+    <div id="import-action-buttons" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"></div>
+    <!-- Extra confirmation for bypass -->
+    <div id="bypass-confirm" style="display:none;background:#1a1a1a;border:1px solid #f59e0b;border-radius:8px;padding:14px;margin-top:10px">
+      <p style="color:#f59e0b;font-size:13px;margin:0 0 10px 0">⚠️ Importing unvalidated emails may increase bounce rate and damage domain reputation. Are you sure?</p>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-danger btn-sm" onclick="confirmImportAllAnyway()">Proceed</button>
+        <button class="btn btn-ghost btn-sm" onclick="cancelBypassConfirm()">Cancel</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Email preview modal -->
@@ -1732,6 +2654,15 @@ John,Smith,john@acme.com,Acme,acme.com,Loved your recent blog post"></textarea>
 <script src="/public/js/leads.js"></script>
 <script src="/public/js/accounts.js"></script>
 <script src="/public/js/settings.js"></script>
+<script src="/public/js/health.js"></script>
+<script src="/public/js/errors.js"></script>
+<script src="/public/js/backup.js"></script>
+<script src="/public/js/dns.js"></script>
+<script src="/public/js/clientReports.js"></script>
+<script src="/public/js/analytics.js"></script>
+<script src="/public/js/exports.js"></script>
+<script src="/public/js/blacklist.js"></script>
+<script src="/public/js/clients.js"></script>
 <script src="/public/js/navigation.js"></script>
 </body>
 </html>

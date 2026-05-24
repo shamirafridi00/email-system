@@ -105,6 +105,43 @@ export function initDatabase() {
     );
   `);
 
+  // ─── Clients table ───────────────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS clients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      contact_name TEXT,
+      contact_email TEXT,
+      hubspot_token TEXT DEFAULT NULL,
+      hubspot_portal_id TEXT DEFAULT NULL,
+      status TEXT DEFAULT 'active',
+      notes TEXT DEFAULT NULL,
+      color TEXT DEFAULT '#6366f1',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // Seed default client if none exists
+  const clientCount = db.query<{ count: number }, []>("SELECT COUNT(*) as count FROM clients").get();
+  if (clientCount && clientCount.count === 0) {
+    db.exec("INSERT INTO clients (name, contact_name, status) VALUES ('Default Client', 'System Owner', 'active')");
+  }
+
+  // Add client_id columns to campaigns, accounts, warmup_accounts
+  try { db.exec("ALTER TABLE campaigns ADD COLUMN client_id INTEGER DEFAULT NULL"); } catch {}
+  try { db.exec("ALTER TABLE accounts ADD COLUMN client_id INTEGER DEFAULT NULL"); } catch {}
+  try { db.exec("ALTER TABLE warmup_accounts ADD COLUMN client_id INTEGER DEFAULT NULL"); } catch {}
+
+  // Backfill all existing rows to the default client
+  const defaultClient = db.query<{ id: number }, []>("SELECT id FROM clients ORDER BY id ASC LIMIT 1").get();
+  if (defaultClient) {
+    const dcId = defaultClient.id;
+    db.run("UPDATE campaigns SET client_id = ? WHERE client_id IS NULL", [dcId]);
+    db.run("UPDATE accounts SET client_id = ? WHERE client_id IS NULL", [dcId]);
+    db.run("UPDATE warmup_accounts SET client_id = ? WHERE client_id IS NULL", [dcId]);
+    db.exec(`INSERT OR IGNORE INTO system_settings (key, value) VALUES ('current_client_id', '${dcId}');`);
+  }
+
   // warmup_accounts migrations
   try { db.exec("ALTER TABLE warmup_accounts ADD COLUMN warmup_started_at DATETIME DEFAULT NULL"); } catch {}
   try { db.exec("ALTER TABLE warmup_accounts ADD COLUMN warmup_target_days INTEGER DEFAULT 14"); } catch {}
@@ -116,6 +153,69 @@ export function initDatabase() {
   try { db.exec("ALTER TABLE warmup_accounts ADD COLUMN notes TEXT DEFAULT ''"); } catch {}
   try { db.exec("ALTER TABLE warmup_accounts ADD COLUMN last_failure_at DATETIME DEFAULT NULL"); } catch {}
   try { db.exec("ALTER TABLE warmup_accounts ADD COLUMN consecutive_failures INTEGER DEFAULT 0"); } catch {}
+
+  // leads migrations
+  try { db.exec("ALTER TABLE leads ADD COLUMN unsubscribe_token TEXT DEFAULT NULL"); } catch {}
+  db.exec("UPDATE leads SET unsubscribe_token = lower(hex(randomblob(16))) WHERE unsubscribe_token IS NULL");
+  try { db.exec("ALTER TABLE leads ADD COLUMN valid INTEGER DEFAULT 1"); } catch {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN validation_reason TEXT DEFAULT NULL"); } catch {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN opened INTEGER DEFAULT 0"); } catch {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN opened_at DATETIME DEFAULT NULL"); } catch {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN open_count INTEGER DEFAULT 0"); } catch {}
+  try { db.exec("ALTER TABLE sent_log ADD COLUMN tracking_token TEXT DEFAULT NULL"); } catch {}
+  try { db.exec("ALTER TABLE sent_log ADD COLUMN opened INTEGER DEFAULT 0"); } catch {}
+  try { db.exec("ALTER TABLE sent_log ADD COLUMN opened_at DATETIME DEFAULT NULL"); } catch {}
+
+  // leads timezone columns
+  try { db.exec("ALTER TABLE leads ADD COLUMN timezone_offset REAL DEFAULT NULL"); } catch {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN timezone_label TEXT DEFAULT NULL"); } catch {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN optimal_send_hour INTEGER DEFAULT 9"); } catch {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN timezone_detected INTEGER DEFAULT 0"); } catch {}
+
+  // campaigns timezone_aware column
+  try { db.exec("ALTER TABLE campaigns ADD COLUMN timezone_aware INTEGER DEFAULT 0"); } catch {}
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS email_opens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tracking_token TEXT UNIQUE,
+      lead_id INTEGER,
+      campaign_id INTEGER,
+      step_number INTEGER,
+      email TEXT,
+      opened_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      ip_address TEXT DEFAULT NULL,
+      user_agent TEXT DEFAULT NULL,
+      open_count INTEGER DEFAULT 1
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS dns_check_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      domain TEXT NOT NULL,
+      overall_score INTEGER,
+      overall_status TEXT,
+      spf_found INTEGER DEFAULT 0,
+      dkim_found INTEGER DEFAULT 0,
+      dmarc_found INTEGER DEFAULT 0,
+      checked_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS client_report_config (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER UNIQUE,
+      client_email TEXT NOT NULL,
+      client_name TEXT,
+      send_daily INTEGER DEFAULT 1,
+      send_weekly INTEGER DEFAULT 1,
+      send_time_hour INTEGER DEFAULT 8,
+      active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
 
   // warmup_log migrations
   try { db.exec("ALTER TABLE warmup_log ADD COLUMN conversation_id TEXT DEFAULT 'auto'"); } catch {}
@@ -353,6 +453,60 @@ export function initDatabase() {
     CREATE TABLE IF NOT EXISTS sessions (
       token TEXT PRIMARY KEY,
       expires_at INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS unsubscribe_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lead_id INTEGER,
+      lead_email TEXT,
+      token TEXT,
+      unsubscribed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      ip_address TEXT DEFAULT NULL,
+      user_agent TEXT DEFAULT NULL
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS backup_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      filename TEXT UNIQUE NOT NULL,
+      file_size_kb INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      note TEXT DEFAULT NULL
+    );
+  `);
+
+  db.exec("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('auto_backup_enabled', '1');");
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS blacklist (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      value TEXT UNIQUE NOT NULL,
+      reason TEXT DEFAULT NULL,
+      added_by TEXT DEFAULT 'manual',
+      active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // Seed common personal email domains
+  const personalDomains = ['gmail.com','yahoo.com','hotmail.com','outlook.com','icloud.com','aol.com','protonmail.com','mail.com','zoho.com','yandex.com'];
+  const seedBlacklist = db.prepare("INSERT OR IGNORE INTO blacklist (type, value, reason, added_by) VALUES ('domain', ?, 'Personal email domain - not suitable for B2B outreach', 'system-seed')");
+  for (const domain of personalDomains) seedBlacklist.run(domain);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS system_errors (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      error_type TEXT NOT NULL,
+      severity TEXT DEFAULT 'error',
+      message TEXT NOT NULL,
+      stack_trace TEXT DEFAULT NULL,
+      context TEXT DEFAULT NULL,
+      resolved INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
