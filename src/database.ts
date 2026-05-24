@@ -1,7 +1,9 @@
 import { Database } from "bun:sqlite";
 import { join } from "path";
+import { mkdirSync } from "fs";
 
-const DB_PATH = join(import.meta.dir, "../data/system.db");
+const DB_PATH = process.env.DATABASE_PATH || join(process.cwd(), "data", "system.db");
+mkdirSync(join(DB_PATH, ".."), { recursive: true });
 
 export const db = new Database(DB_PATH, { create: true });
 

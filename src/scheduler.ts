@@ -12,8 +12,12 @@ import { isUSBusinessHours } from "./utils/timezone";
 import { logError } from "./modules/logger";
 import { createBackup } from "./modules/backup";
 
-const CONVERSATIONS_DIR = join(import.meta.dir, "../conversations");
+const CONVERSATIONS_DIR = process.env.CONVERSATIONS_DIR || join(process.cwd(), "conversations");
 const PROCESSED_DIR = join(CONVERSATIONS_DIR, "processed");
+
+// Ensure directories exist on startup
+mkdirSync(CONVERSATIONS_DIR, { recursive: true });
+mkdirSync(PROCESSED_DIR, { recursive: true });
 
 // Tracks files dispatched this session so a 5-min tick doesn't re-queue them
 const dispatchedFiles = new Set<string>();

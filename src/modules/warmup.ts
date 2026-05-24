@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { readFileSync } from "fs";
+import { join } from "path";
 import { db } from "../database";
 import { randomBusinessDelay, isUSBusinessHours, getNextUSBusinessStart } from "../utils/timezone";
 import { sendFailureAlert, sendWarmupCompleteNotification } from "./emailReports";
@@ -635,7 +636,7 @@ export async function generateDailyConversations(): Promise<{ generated: number;
     return { generated: 0, skipped: "fewer than 2 active accounts" };
   }
 
-  const CONVERSATIONS_DIR_PATH = new URL("../../conversations", import.meta.url).pathname;
+  const CONVERSATIONS_DIR_PATH = process.env.CONVERSATIONS_DIR || join(process.cwd(), "conversations");
   const today = new Date().toISOString().split("T")[0];
   let generated = 0;
 

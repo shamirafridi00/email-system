@@ -2,9 +2,8 @@ import * as fs from "fs";
 import * as path from "path";
 import { db, initDatabase } from "../database";
 
-const PROJECT_ROOT = path.join(import.meta.dir, "../..");
-const BACKUP_DIR = path.join(PROJECT_ROOT, "backups");
-const DB_PATH = path.join(PROJECT_ROOT, "data/system.db");
+const BACKUP_DIR = process.env.BACKUP_DIR || path.join(process.cwd(), "backups");
+const DB_PATH = process.env.DATABASE_PATH || path.join(process.cwd(), "data", "system.db");
 const MAX_BACKUPS = 7;
 
 function padded(n: number): string {

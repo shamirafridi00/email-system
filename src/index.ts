@@ -223,8 +223,10 @@ app.onError((err, c) => {
   return c.json({ error: err.message ?? "Internal server error" }, 500);
 });
 
+const port = parseInt(process.env.PORT || "3000");
+
 export default {
-  port: 3000,
+  port,
   fetch: app.fetch,
   idleTimeout: 120,
 };
