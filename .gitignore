@@ -32,3 +32,20 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# SQLite database and WAL files
+data/system.db
+data/system.db-shm
+data/system.db-wal
+
+# Automated database backups
+backups/
+
+# Processed conversation files
+conversations/processed/
+
+# Claude Code local settings
+.claude/
+
+# Environment files with secrets
+.env.example
