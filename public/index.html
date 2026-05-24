@@ -6,54 +6,59 @@
 <title>Email System</title>
 <link rel="stylesheet" href="/public/css/style.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 </head>
 <body>
 
 <div id="sidebar">
-  <div class="logo">✉ Email System</div>
+  <div class="logo"><h1><i data-lucide="mail" style="width:16px;height:16px;color:#6366f1"></i> GTM System</h1></div>
   <nav>
+    <div class="nav-section campaign-section" style="padding:4px 0">
+      <a data-section="getting-started"><i data-lucide="rocket" style="width:15px;height:15px"></i> Getting Started</a>
+    </div>
+    <div class="nav-divider"></div>
     <div class="nav-section warmup-section">
       <div class="nav-section-label"><span class="dot"></span>Warmup System</div>
-      <a data-section="warmup-dashboard">📊 Warmup Dashboard</a>
-      <a data-section="warmup-progress">📈 Warmup Progress</a>
-      <a data-section="warmup-schedule">📅 Warmup Schedule</a>
-      <a data-section="warmup-readiness">✅ Readiness Check</a>
-      <a data-section="warmup-groups">🗂 Account Groups</a>
-      <a data-section="warmup-accounts">🔥 Warmup Accounts</a>
-      <a data-section="conversations">💬 Conversations</a>
-      <a data-section="warmup-log">📋 Warmup Log</a>
-      <a data-section="warmup-history">🕐 Account History</a>
-      <a data-section="warmup-analytics">📉 Analytics</a>
-      <a data-section="warmup-calendar">📆 Calendar</a>
-      <a data-section="warmup-library">📚 Topics Library</a>
-      <a data-section="warmup-placement">📬 Inbox Test</a>
-      <a data-section="warmup-manual">📖 Warmup Manual</a>
+      <a data-section="warmup-dashboard"><i data-lucide="layout-dashboard" style="width:15px;height:15px"></i> Warmup Dashboard</a>
+      <a data-section="warmup-progress"><i data-lucide="trending-up" style="width:15px;height:15px"></i> Warmup Progress</a>
+      <a data-section="warmup-schedule"><i data-lucide="calendar-clock" style="width:15px;height:15px"></i> Warmup Schedule</a>
+      <a data-section="warmup-readiness"><i data-lucide="shield-check" style="width:15px;height:15px"></i> Readiness Check</a>
+      <a data-section="warmup-groups"><i data-lucide="layers" style="width:15px;height:15px"></i> Account Groups</a>
+      <a data-section="warmup-accounts"><i data-lucide="users" style="width:15px;height:15px"></i> Warmup Accounts</a>
+      <a data-section="conversations"><i data-lucide="message-square" style="width:15px;height:15px"></i> Conversations</a>
+      <a data-section="warmup-log"><i data-lucide="scroll-text" style="width:15px;height:15px"></i> Warmup Log</a>
+      <a data-section="warmup-history"><i data-lucide="history" style="width:15px;height:15px"></i> Account History</a>
+      <a data-section="warmup-analytics"><i data-lucide="bar-chart-2" style="width:15px;height:15px"></i> Analytics</a>
+      <a data-section="warmup-calendar"><i data-lucide="calendar" style="width:15px;height:15px"></i> Calendar</a>
+      <a data-section="warmup-library"><i data-lucide="library" style="width:15px;height:15px"></i> Topics Library</a>
+      <a data-section="warmup-placement"><i data-lucide="inbox" style="width:15px;height:15px"></i> Inbox Test</a>
+      <a data-section="warmup-manual"><i data-lucide="book-open" style="width:15px;height:15px"></i> Warmup Manual</a>
     </div>
     <div class="nav-divider"></div>
     <div class="nav-section campaign-section">
       <div class="nav-section-label"><span class="dot" id="campaign-section-client-dot" style="background:#6366f1"></span>Campaign System</div>
-      <a data-section="campaign-dashboard">📊 Campaign Dashboard</a>
-      <a data-section="analytics">📈 Analytics</a>
-      <a data-section="campaigns">📣 Campaigns</a>
-      <a data-section="templates">📋 Templates</a>
-      <a data-section="abtests">🧪 A/B Tests</a>
-      <a data-section="leads">👥 Leads</a>
-      <a data-section="sending-accounts">⚙ Sending Accounts</a>
-      <a data-section="blacklist">🚫 Blacklist</a>
-      <a data-section="campaign-manual">📖 Campaign Manual</a>
-      <a data-section="client-reports">📧 Client Reports</a>
-      <a data-section="exports">📥 Export Data</a>
+      <a data-section="campaign-dashboard"><i data-lucide="layout-dashboard" style="width:15px;height:15px"></i> Campaign Dashboard</a>
+      <a data-section="analytics"><i data-lucide="bar-chart-2" style="width:15px;height:15px"></i> Analytics</a>
+      <a data-section="campaigns"><i data-lucide="megaphone" style="width:15px;height:15px"></i> Campaigns</a>
+      <a data-section="templates"><i data-lucide="copy" style="width:15px;height:15px"></i> Templates</a>
+      <a data-section="abtests"><i data-lucide="split" style="width:15px;height:15px"></i> A/B Tests</a>
+      <a data-section="leads"><i data-lucide="user-check" style="width:15px;height:15px"></i> Leads</a>
+      <a data-section="sending-accounts"><i data-lucide="send" style="width:15px;height:15px"></i> Sending Accounts</a>
+      <a data-section="blacklist"><i data-lucide="ban" style="width:15px;height:15px"></i> Blacklist</a>
+      <a data-section="campaign-manual"><i data-lucide="book-open" style="width:15px;height:15px"></i> Campaign Manual</a>
+      <a data-section="client-reports"><i data-lucide="file-text" style="width:15px;height:15px"></i> Client Reports</a>
+      <a data-section="exports"><i data-lucide="download" style="width:15px;height:15px"></i> Export Data</a>
     </div>
     <div class="nav-divider"></div>
     <div class="nav-section settings-section">
       <div class="nav-section-label"><span class="dot"></span>Settings</div>
-      <a data-section="clients">👥 Clients</a>
-      <a data-section="settings">🔑 Settings</a>
-      <a data-section="health">🩺 Health Check</a>
-      <a data-section="dns-checker">🔎 DNS Checker</a>
-      <a data-section="backup">💾 Backup &amp; Restore</a>
-      <a data-section="error-log" style="display:flex;align-items:center;justify-content:space-between">
-        <span>🪲 Error Log</span>
+      <a data-section="clients"><i data-lucide="building-2" style="width:15px;height:15px"></i> Clients</a>
+      <a data-section="settings"><i data-lucide="settings" style="width:15px;height:15px"></i> Settings</a>
+      <a data-section="health"><i data-lucide="activity" style="width:15px;height:15px"></i> Health Check</a>
+      <a data-section="dns-checker"><i data-lucide="search-code" style="width:15px;height:15px"></i> DNS Checker</a>
+      <a data-section="backup"><i data-lucide="database" style="width:15px;height:15px"></i> Backup &amp; Restore</a>
+      <a data-section="error-log" style="justify-content:space-between">
+        <span style="display:flex;align-items:center;gap:9px"><i data-lucide="alert-triangle" style="width:15px;height:15px"></i> Error Log</span>
         <span id="error-log-badge" style="display:none;background:#dc2626;color:#fff;border-radius:10px;font-size:10px;font-weight:700;padding:1px 6px;min-width:18px;text-align:center"></span>
       </a>
     </div>
@@ -91,6 +96,64 @@
   </div>
 
   <div id="content">
+
+    <!-- GETTING STARTED -->
+    <div id="section-getting-started" class="section">
+      <!-- Welcome card -->
+      <div style="background:linear-gradient(135deg,#1e1b4b 0%,#312e81 50%,#1e1b4b 100%);border:1px solid #4338ca;border-radius:16px;padding:32px;margin-bottom:24px;position:relative;overflow:hidden">
+        <div style="position:absolute;inset:0;background:radial-gradient(circle at 70% 50%,rgba(99,102,241,0.15) 0%,transparent 70%)"></div>
+        <div style="position:relative">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#818cf8;margin-bottom:10px">Welcome back</div>
+          <div style="font-size:26px;font-weight:800;color:#f0f0f0;letter-spacing:-0.5px;margin-bottom:6px">Your GTM System is Ready</div>
+          <div style="font-size:14px;color:#a5b4fc;margin-bottom:20px">Client: <span id="gs-client-name" style="color:#e0e7ff;font-weight:600">Loading…</span></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn btn-primary" onclick="navigate('campaigns')" style="background:#6366f1;border-color:#6366f1">Create Campaign</button>
+            <button class="btn" onclick="navigate('warmup-accounts')" style="background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.15);color:#e0e7ff">Add Warmup Account</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div style="font-size:13px;font-weight:700;color:#a0a0a0;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:14px">Quick Actions</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:28px">
+        <div onclick="navigate('warmup-accounts')" style="background:#161616;border:1px solid #2a2a2a;border-radius:12px;padding:20px;cursor:pointer;transition:all 0.15s" onmouseover="this.style.borderColor='#6366f1';this.style.background='#1a1a2e'" onmouseout="this.style.borderColor='#2a2a2a';this.style.background='#161616'">
+          <div style="width:36px;height:36px;background:#1e1b4b;border-radius:8px;display:flex;align-items:center;justify-content:center;margin-bottom:12px"><i data-lucide="users" style="width:18px;height:18px;color:#818cf8"></i></div>
+          <div style="font-size:14px;font-weight:600;color:#f0f0f0;margin-bottom:4px">Add Warmup Account</div>
+          <div style="font-size:12px;color:#666">Connect a new email account for warmup</div>
+        </div>
+        <div onclick="navigate('conversations')" style="background:#161616;border:1px solid #2a2a2a;border-radius:12px;padding:20px;cursor:pointer;transition:all 0.15s" onmouseover="this.style.borderColor='#22c55e';this.style.background='#0a1a0a'" onmouseout="this.style.borderColor='#2a2a2a';this.style.background='#161616'">
+          <div style="width:36px;height:36px;background:#052e16;border-radius:8px;display:flex;align-items:center;justify-content:center;margin-bottom:12px"><i data-lucide="message-square" style="width:18px;height:18px;color:#22c55e"></i></div>
+          <div style="font-size:14px;font-weight:600;color:#f0f0f0;margin-bottom:4px">Generate Conversation</div>
+          <div style="font-size:12px;color:#666">Create AI warmup email threads</div>
+        </div>
+        <div onclick="navigate('warmup-progress')" style="background:#161616;border:1px solid #2a2a2a;border-radius:12px;padding:20px;cursor:pointer;transition:all 0.15s" onmouseover="this.style.borderColor='#22c55e';this.style.background='#0a1a0a'" onmouseout="this.style.borderColor='#2a2a2a';this.style.background='#161616'">
+          <div style="width:36px;height:36px;background:#052e16;border-radius:8px;display:flex;align-items:center;justify-content:center;margin-bottom:12px"><i data-lucide="trending-up" style="width:18px;height:18px;color:#22c55e"></i></div>
+          <div style="font-size:14px;font-weight:600;color:#f0f0f0;margin-bottom:4px">Warmup Progress</div>
+          <div style="font-size:12px;color:#666">Track health scores and daily volume</div>
+        </div>
+        <div onclick="navigate('campaigns')" style="background:#161616;border:1px solid #2a2a2a;border-radius:12px;padding:20px;cursor:pointer;transition:all 0.15s" onmouseover="this.style.borderColor='#6366f1';this.style.background='#1a1a2e'" onmouseout="this.style.borderColor='#2a2a2a';this.style.background='#161616'">
+          <div style="width:36px;height:36px;background:#1e1b4b;border-radius:8px;display:flex;align-items:center;justify-content:center;margin-bottom:12px"><i data-lucide="megaphone" style="width:18px;height:18px;color:#818cf8"></i></div>
+          <div style="font-size:14px;font-weight:600;color:#f0f0f0;margin-bottom:4px">Create Campaign</div>
+          <div style="font-size:12px;color:#666">Set up a new outreach campaign</div>
+        </div>
+        <div onclick="navigate('leads')" style="background:#161616;border:1px solid #2a2a2a;border-radius:12px;padding:20px;cursor:pointer;transition:all 0.15s" onmouseover="this.style.borderColor='#6366f1';this.style.background='#1a1a2e'" onmouseout="this.style.borderColor='#2a2a2a';this.style.background='#161616'">
+          <div style="width:36px;height:36px;background:#1e1b4b;border-radius:8px;display:flex;align-items:center;justify-content:center;margin-bottom:12px"><i data-lucide="user-check" style="width:18px;height:18px;color:#818cf8"></i></div>
+          <div style="font-size:14px;font-weight:600;color:#f0f0f0;margin-bottom:4px">Import Leads</div>
+          <div style="font-size:12px;color:#666">Upload a CSV of prospects</div>
+        </div>
+        <div onclick="navigate('analytics')" style="background:#161616;border:1px solid #2a2a2a;border-radius:12px;padding:20px;cursor:pointer;transition:all 0.15s" onmouseover="this.style.borderColor='#f59e0b';this.style.background='#1a1400'" onmouseout="this.style.borderColor='#2a2a2a';this.style.background='#161616'">
+          <div style="width:36px;height:36px;background:#1c1400;border-radius:8px;display:flex;align-items:center;justify-content:center;margin-bottom:12px"><i data-lucide="bar-chart-2" style="width:18px;height:18px;color:#f59e0b"></i></div>
+          <div style="font-size:14px;font-weight:600;color:#f0f0f0;margin-bottom:4px">View Analytics</div>
+          <div style="font-size:12px;color:#666">Open rates, replies, and pipeline</div>
+        </div>
+      </div>
+
+      <!-- Setup Checklist -->
+      <div style="font-size:13px;font-weight:700;color:#a0a0a0;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:14px">Setup Checklist</div>
+      <div style="background:#161616;border:1px solid #2a2a2a;border-radius:14px;overflow:hidden">
+        <div id="gs-checklist"><div class="loading"><span class="spinner"></span></div></div>
+      </div>
+    </div>
 
     <!-- WARMUP DASHBOARD -->
     <div id="section-warmup-dashboard" class="section">
@@ -2956,6 +3019,11 @@ John,Smith,john@acme.com,Acme,acme.com,Loved your recent blog post"></textarea>
 <script src="/public/js/clients.js"></script>
 <script src="/public/js/templates.js"></script>
 <script src="/public/js/abtests.js"></script>
+<script src="/public/js/gettingStarted.js"></script>
+<script>
+// Initialize Lucide icons (called once at boot, then again after dynamic renders)
+lucide.createIcons();
+</script>
 <script src="/public/js/navigation.js"></script>
 </body>
 </html>

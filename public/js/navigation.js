@@ -28,6 +28,7 @@ function navigate(section) {
     'campaign-dashboard': function() { loadCurrentClient(); loadCampaignDashboard(); },
     'analytics': function() { loadCurrentClient(); loadAnalytics(); },
     'campaigns': function() { loadCurrentClient(); loadCampaigns(); },
+    'getting-started': loadGettingStarted,
     'templates': loadTemplates,
     'abtests': loadABTests,
     'leads': function() { loadCurrentClient(); loadLeads(); },
@@ -47,6 +48,8 @@ function navigate(section) {
   if (section !== 'abtests') stopABAutoRefresh();
 
   if (loaders[section]) loaders[section]();
+  // Re-initialize Lucide icons after any dynamic section content renders
+  if (typeof lucide !== 'undefined') setTimeout(function() { lucide.createIcons(); }, 50);
 }
 
 // ─── Boot ────────────────────────────────────────────────────────────────────
@@ -58,7 +61,7 @@ function navigate(section) {
 
 restoreHubspotToken();
 loadCurrentClient();
-navigate('campaign-dashboard');
+navigate('getting-started');
 
 // Sidebar error badge — load immediately and refresh every 5 minutes
 updateErrorBadge();
