@@ -2,6 +2,7 @@ import { ImapFlow } from "imapflow";
 import { db } from "../database";
 import { logWarning } from "./logger";
 import { sendReplyNotification } from "./emailReports";
+import { recordReply } from "./abTesting";
 
 export interface ImapAccount {
   email: string;
@@ -75,6 +76,18 @@ export async function checkReplies(account: ImapAccount): Promise<void> {
               db.run("UPDATE leads SET status = 'replied' WHERE id = ?", [lead.id]);
               db.run("INSERT INTO replies (lead_id) VALUES (?)", [lead.id]);
               console.log(`Reply detected from ${senderAddress} (lead ${lead.id}) on ${account.email}`);
+
+              // Record reply on any active A/B test for this lead's most recent sent log entry
+              try {
+                const abRow = db
+                  .query<{ ab_test_id: number; ab_variant: string }, [number]>(
+                    "SELECT ab_test_id, ab_variant FROM sent_log WHERE lead_id = ? AND ab_test_id IS NOT NULL ORDER BY sent_at DESC LIMIT 1"
+                  )
+                  .get(lead.id);
+                if (abRow) {
+                  recordReply(abRow.ab_test_id, abRow.ab_variant);
+                }
+              } catch {}
 
               // Send instant notification — never let this break the IMAP flow
               sendReplyNotification(lead, replyPreview || "No preview available").catch((err) => {

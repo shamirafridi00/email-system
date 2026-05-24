@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { calculateTimezoneAwareSendDate } from "./timezoneMapper";
 import { isBlacklisted, autoBlacklistBounced } from "./blacklistChecker";
 import { logWarning } from "./logger";
+import { getActiveTest, assignVariant } from "./abTesting";
 
 interface LeadRow {
   id: number;
@@ -165,7 +166,22 @@ export async function runSequences(): Promise<RunResult> {
       personalized_line: lead.personalized_line ?? "",
     };
 
-    const subject = interpolate(step.subject, vars);
+    // A/B test: override subject if an active test exists for this campaign+step
+    const abTest = getActiveTest(lead.campaign_id, lead.current_step);
+    let abTestId: number | null = null;
+    let abVariant: "a" | "b" | null = null;
+    let stepSubject = step.subject;
+
+    if (abTest) {
+      abVariant = assignVariant(abTest.id);
+      abTestId = abTest.id;
+      stepSubject = abVariant === "b" ? abTest.variant_b_subject : abTest.variant_a_subject;
+      // Increment sent count for the assigned variant
+      const sentCol = abVariant === "b" ? "variant_b_sent" : "variant_a_sent";
+      db.run(`UPDATE ab_tests SET ${sentCol} = ${sentCol} + 1 WHERE id = ?`, [abTestId]);
+    }
+
+    const subject = interpolate(stepSubject, vars);
     const body = interpolate(step.body, vars);
 
     try {
@@ -183,8 +199,8 @@ export async function runSequences(): Promise<RunResult> {
       });
 
       db.run(
-        "INSERT INTO sent_log (lead_id, campaign_id, step_number, subject, tracking_token) VALUES (?, ?, ?, ?, ?)",
-        [lead.id, lead.campaign_id, lead.current_step, subject, tracking_token]
+        "INSERT INTO sent_log (lead_id, campaign_id, step_number, subject, tracking_token, ab_test_id, ab_variant) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [lead.id, lead.campaign_id, lead.current_step, subject, tracking_token, abTestId, abVariant]
       );
 
       db.run(

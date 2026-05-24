@@ -28,6 +28,8 @@ function navigate(section) {
     'campaign-dashboard': function() { loadCurrentClient(); loadCampaignDashboard(); },
     'analytics': function() { loadCurrentClient(); loadAnalytics(); },
     'campaigns': function() { loadCurrentClient(); loadCampaigns(); },
+    'templates': loadTemplates,
+    'abtests': loadABTests,
     'leads': function() { loadCurrentClient(); loadLeads(); },
     'sending-accounts': function() { loadCurrentClient(); loadAccounts(); },
     'settings': function() { loadSettings(); loadNotificationSettings(); },
@@ -40,8 +42,9 @@ function navigate(section) {
     'blacklist': loadBlacklist,
     'clients': loadClients,
   };
-  // Stop error log auto refresh when leaving that section
+  // Stop auto refresh jobs when leaving their sections
   if (section !== 'error-log') stopErrorAutoRefresh();
+  if (section !== 'abtests') stopABAutoRefresh();
 
   if (loaders[section]) loaders[section]();
 }

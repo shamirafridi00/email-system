@@ -35,6 +35,8 @@
       <a data-section="campaign-dashboard">📊 Campaign Dashboard</a>
       <a data-section="analytics">📈 Analytics</a>
       <a data-section="campaigns">📣 Campaigns</a>
+      <a data-section="templates">📋 Templates</a>
+      <a data-section="abtests">🧪 A/B Tests</a>
       <a data-section="leads">👥 Leads</a>
       <a data-section="sending-accounts">⚙ Sending Accounts</a>
       <a data-section="blacklist">🚫 Blacklist</a>
@@ -669,11 +671,300 @@ Replace sender@gmail.com and receiver@gmail.com with two different email address
         </div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-primary" onclick="saveCampaign()">Save Campaign</button>
+          <button class="btn btn-ghost" onclick="showStartFromTemplateModal()">📋 Start from Template</button>
           <button class="btn btn-ghost" onclick="toggleCreateCampaign()">Cancel</button>
         </div>
       </div>
       <div class="card" style="padding:0;overflow:hidden">
         <div class="table-wrap" id="campaigns-table"></div>
+      </div>
+    </div>
+
+    <!-- TEMPLATES -->
+    <div id="section-templates" class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Campaign Templates</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:3px">Save and reuse campaign configurations across clients</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <select id="template-category-filter" onchange="filterTemplatesByCategory()" style="font-size:13px;padding:6px 10px;background:#111827;border:1px solid #374151;color:#e5e7eb;border-radius:6px">
+            <option value="">All Categories</option>
+            <option value="agency">Agency</option>
+            <option value="saas">SaaS</option>
+            <option value="ecommerce">E-commerce</option>
+            <option value="personal-brand">Personal Brand</option>
+            <option value="general">General</option>
+          </select>
+          <button class="btn btn-primary" onclick="showAddTemplateForm()">+ Add New Template</button>
+          <button class="btn btn-ghost" onclick="showSaveFromCampaignModal()">💾 Save from Campaign</button>
+        </div>
+      </div>
+
+      <!-- Add template form (hidden by default) -->
+      <div id="add-template-form-card" class="card" style="display:none;margin-bottom:20px">
+        <div style="font-size:15px;font-weight:700;color:#e5e7eb;margin-bottom:16px">New Template</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+          <div class="form-group" style="margin-bottom:0">
+            <label>Template Name *</label>
+            <input id="tpl-name" placeholder="e.g. Agency Outreach">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Category</label>
+            <select id="tpl-category">
+              <option value="general">General</option>
+              <option value="agency">Agency</option>
+              <option value="saas">SaaS</option>
+              <option value="ecommerce">E-commerce</option>
+              <option value="personal-brand">Personal Brand</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea id="tpl-description" rows="2" placeholder="What is this template for?"></textarea>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">
+          <div class="form-group" style="margin-bottom:0">
+            <label>Daily Limit</label>
+            <input id="tpl-limit" type="number" value="20" min="1" max="500">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Start Hour (0-23)</label>
+            <input id="tpl-start" type="number" value="9" min="0" max="23">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>End Hour (0-23)</label>
+            <input id="tpl-end" type="number" value="17" min="0" max="23">
+          </div>
+          <div class="form-group" style="margin-bottom:0;display:flex;flex-direction:column;justify-content:flex-end">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding-bottom:8px">
+              <input id="tpl-timezone-aware" type="checkbox"> Timezone Aware
+            </label>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:12px">
+          <label>Send Days</label>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">
+            <label><input type="checkbox" class="tpl-day" value="mon" checked> Mon</label>
+            <label><input type="checkbox" class="tpl-day" value="tue" checked> Tue</label>
+            <label><input type="checkbox" class="tpl-day" value="wed" checked> Wed</label>
+            <label><input type="checkbox" class="tpl-day" value="thu" checked> Thu</label>
+            <label><input type="checkbox" class="tpl-day" value="fri" checked> Fri</label>
+            <label><input type="checkbox" class="tpl-day" value="sat"> Sat</label>
+            <label><input type="checkbox" class="tpl-day" value="sun"> Sun</label>
+          </div>
+        </div>
+        <div style="font-size:13px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Sequence Steps</div>
+        <div id="tpl-steps-list"></div>
+        <div id="tpl-add-step-form" class="card" style="background:#0d1117;margin-bottom:12px">
+          <div style="display:grid;grid-template-columns:80px 1fr;gap:10px;margin-bottom:8px">
+            <div class="form-group" style="margin-bottom:0"><label>Delay (days)</label><input id="tpl-step-delay" type="number" value="0" min="0"></div>
+            <div class="form-group" style="margin-bottom:0"><label>Subject</label><input id="tpl-step-subject" placeholder="e.g. quick question {{first_name}}"></div>
+          </div>
+          <div class="form-group"><label>Body</label><textarea id="tpl-step-body" rows="5" placeholder="Hi {{first_name}},&#10;&#10;{{personalized_line}}&#10;&#10;Best,"></textarea></div>
+          <button class="btn btn-ghost btn-sm" onclick="addTemplateStep()">+ Add Step</button>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" onclick="saveTemplate()">Save Template</button>
+          <button class="btn btn-ghost" onclick="hideAddTemplateForm()">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Templates grid -->
+      <div id="templates-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px">
+        <div class="loading"><span class="spinner"></span></div>
+      </div>
+    </div>
+
+    <!-- A/B TESTS -->
+    <div id="section-abtests" class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">A/B Testing</div>
+          <div style="font-size:13px;color:#6b7280;margin-top:3px">Test different subject lines and automatically find what works best</div>
+        </div>
+        <button class="btn btn-primary" onclick="showCreateTestForm()" style="background:#4f46e5;border-color:#4f46e5">+ Create New Test</button>
+      </div>
+
+      <!-- How It Works -->
+      <div style="background:#111827;border:1px solid #1f2937;border-radius:10px;padding:20px;margin-bottom:24px">
+        <div style="font-size:13px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px">How It Works</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <div style="width:28px;height:28px;border-radius:50%;background:#312e81;color:#a5b4fc;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">1</div>
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#e5e7eb;margin-bottom:3px">Create a Test</div>
+              <div style="font-size:12px;color:#6b7280">Choose a campaign step and write two subject line versions to compare.</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <div style="width:28px;height:28px;border-radius:50%;background:#312e81;color:#a5b4fc;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">2</div>
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#e5e7eb;margin-bottom:3px">Split 50/50</div>
+              <div style="font-size:12px;color:#6b7280">The system automatically splits your leads evenly, sending Version A to half and Version B to the other half.</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <div style="width:28px;height:28px;border-radius:50%;background:#312e81;color:#a5b4fc;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">3</div>
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#e5e7eb;margin-bottom:3px">Declare Winner</div>
+              <div style="font-size:12px;color:#6b7280">When enough data is collected the system automatically declares a winner and switches remaining leads to the winning subject.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Create Test Form -->
+      <div id="ab-create-form" style="display:none;background:#111827;border:1px solid #374151;border-radius:10px;padding:24px;margin-bottom:24px">
+        <div style="font-size:15px;font-weight:600;color:#e5e7eb;margin-bottom:18px">Create A/B Test</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div style="grid-column:span 2">
+            <label style="font-size:12px;color:#9ca3af;display:block;margin-bottom:5px">Test Name</label>
+            <input id="ab-name" type="text" class="form-control" placeholder="e.g. Subject Line Test May 2026">
+          </div>
+          <div>
+            <label style="font-size:12px;color:#9ca3af;display:block;margin-bottom:5px">Campaign</label>
+            <select id="ab-campaign" class="form-control" onchange="abPopulateSteps()">
+              <option value="">— select campaign —</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px;color:#9ca3af;display:block;margin-bottom:5px">Sequence Step</label>
+            <select id="ab-step" class="form-control">
+              <option value="">— select campaign first —</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px;color:#9ca3af;display:block;margin-bottom:5px">Version A Subject</label>
+            <input id="ab-subject-a" type="text" class="form-control" placeholder="Version A subject line">
+          </div>
+          <div>
+            <label style="font-size:12px;color:#9ca3af;display:block;margin-bottom:5px">Version B Subject</label>
+            <input id="ab-subject-b" type="text" class="form-control" placeholder="Version B subject line">
+          </div>
+          <div>
+            <label style="font-size:12px;color:#9ca3af;display:block;margin-bottom:5px">Minimum Sample Size</label>
+            <input id="ab-sample-size" type="number" class="form-control" value="50" min="10">
+            <div style="font-size:11px;color:#6b7280;margin-top:4px">Minimum emails per version before declaring winner</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding-top:20px">
+            <label style="font-size:13px;color:#d1d5db">Auto Declare Winner</label>
+            <input id="ab-auto-declare" type="checkbox" checked style="width:16px;height:16px;cursor:pointer">
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:18px">
+          <button class="btn btn-primary" onclick="saveABTest()" style="background:#4f46e5;border-color:#4f46e5">Create A/B Test</button>
+          <button class="btn" onclick="hideCreateTestForm()" style="background:#1f2937;border-color:#374151;color:#9ca3af">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Active Tests -->
+      <div style="font-size:14px;font-weight:600;color:#e5e7eb;margin-bottom:12px">Active Tests</div>
+      <div id="ab-active-tests"><div class="loading"><span class="spinner"></span></div></div>
+
+      <!-- Completed Tests -->
+      <div style="margin-top:28px">
+        <div style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:12px" onclick="toggleCompletedTests()">
+          <div style="font-size:14px;font-weight:600;color:#e5e7eb">Completed Tests</div>
+          <span id="ab-completed-chevron" style="color:#6b7280;font-size:12px">▼</span>
+        </div>
+        <div id="ab-completed-tests" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- A/B Test Details Modal -->
+    <div id="ab-details-modal" onclick="closeABDetailsModal(event)" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:flex-start;justify-content:center;padding:40px 20px;overflow-y:auto">
+      <div style="background:#111827;border:1px solid #374151;border-radius:12px;width:100%;max-width:700px;padding:28px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+          <div id="ab-modal-title" style="font-size:18px;font-weight:700;color:#e5e7eb"></div>
+          <button onclick="closeABDetailsModal()" style="background:none;border:none;color:#6b7280;font-size:20px;cursor:pointer">✕</button>
+        </div>
+        <div id="ab-modal-body"></div>
+      </div>
+    </div>
+
+    <!-- Template Preview Modal -->
+    <div id="template-preview-modal" onclick="closeTemplatePreviewModal(event)" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;display:none;align-items:flex-start;justify-content:center;padding:40px 20px;overflow-y:auto">
+      <div style="background:#111827;border:1px solid #374151;border-radius:12px;width:100%;max-width:680px;padding:28px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+          <div>
+            <div id="tpl-preview-name" style="font-size:18px;font-weight:700;color:#e5e7eb"></div>
+            <div id="tpl-preview-desc" style="font-size:13px;color:#6b7280;margin-top:2px"></div>
+          </div>
+          <button onclick="document.getElementById('template-preview-modal').style.display='none'" style="background:none;border:none;color:#6b7280;font-size:20px;cursor:pointer">✕</button>
+        </div>
+        <div id="tpl-preview-steps"></div>
+      </div>
+    </div>
+
+    <!-- Use Template Modal -->
+    <div id="use-template-modal" onclick="closeUseTemplateModal(event)" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center">
+      <div style="background:#111827;border:1px solid #374151;border-radius:12px;width:100%;max-width:480px;padding:28px;margin:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+          <div style="font-size:16px;font-weight:700;color:#e5e7eb">Use Template: <span id="use-tpl-name" style="color:#818cf8"></span></div>
+          <button onclick="document.getElementById('use-template-modal').style.display='none'" style="background:none;border:none;color:#6b7280;font-size:20px;cursor:pointer">✕</button>
+        </div>
+        <input type="hidden" id="use-tpl-id">
+        <div class="form-group">
+          <label>Campaign Name *</label>
+          <input id="use-tpl-campaign-name" placeholder="e.g. Agency Outreach — Acme Corp">
+        </div>
+        <div class="form-group">
+          <label>Sending Account *</label>
+          <select id="use-tpl-account"></select>
+        </div>
+        <div class="form-group">
+          <label>Client</label>
+          <div id="use-tpl-client-name" style="font-size:13px;color:#818cf8;padding:8px 0"></div>
+        </div>
+        <button class="btn btn-primary" style="width:100%" onclick="submitUseTemplate()">Create Campaign</button>
+      </div>
+    </div>
+
+    <!-- Save From Campaign Modal -->
+    <div id="save-from-campaign-modal" onclick="closeSaveFromCampaignModal(event)" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center">
+      <div style="background:#111827;border:1px solid #374151;border-radius:12px;width:100%;max-width:480px;padding:28px;margin:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+          <div style="font-size:16px;font-weight:700;color:#e5e7eb">Save Campaign as Template</div>
+          <button onclick="document.getElementById('save-from-campaign-modal').style.display='none'" style="background:none;border:none;color:#6b7280;font-size:20px;cursor:pointer">✕</button>
+        </div>
+        <div class="form-group">
+          <label>Campaign</label>
+          <select id="sfc-campaign"></select>
+        </div>
+        <div class="form-group">
+          <label>Template Name *</label>
+          <input id="sfc-name" placeholder="Template name">
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <input id="sfc-description" placeholder="What is this template for?">
+        </div>
+        <div class="form-group">
+          <label>Category</label>
+          <select id="sfc-category">
+            <option value="general">General</option>
+            <option value="agency">Agency</option>
+            <option value="saas">SaaS</option>
+            <option value="ecommerce">E-commerce</option>
+            <option value="personal-brand">Personal Brand</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" style="width:100%" onclick="saveFromCampaign()">Save as Template</button>
+      </div>
+    </div>
+
+    <!-- Start from Template Modal (used in campaigns section) -->
+    <div id="start-from-template-modal" onclick="closeStartFromTemplateModal(event)" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center;padding:40px 20px;overflow-y:auto">
+      <div style="background:#111827;border:1px solid #374151;border-radius:12px;width:100%;max-width:900px;padding:28px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+          <div style="font-size:16px;font-weight:700;color:#e5e7eb">Choose a Template</div>
+          <button onclick="document.getElementById('start-from-template-modal').style.display='none'" style="background:none;border:none;color:#6b7280;font-size:20px;cursor:pointer">✕</button>
+        </div>
+        <div id="start-from-template-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
+          <div class="loading"><span class="spinner"></span></div>
+        </div>
       </div>
     </div>
 
@@ -2663,6 +2954,8 @@ John,Smith,john@acme.com,Acme,acme.com,Loved your recent blog post"></textarea>
 <script src="/public/js/exports.js"></script>
 <script src="/public/js/blacklist.js"></script>
 <script src="/public/js/clients.js"></script>
+<script src="/public/js/templates.js"></script>
+<script src="/public/js/abtests.js"></script>
 <script src="/public/js/navigation.js"></script>
 </body>
 </html>

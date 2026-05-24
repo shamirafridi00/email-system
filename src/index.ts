@@ -16,6 +16,9 @@ import campaignsRoutes from "./routes/campaigns";
 import leadsRoutes from "./routes/leads";
 import dashboardRoutes from "./routes/dashboard";
 import clientsRoutes from "./routes/clients";
+import templatesRoutes from "./routes/templates";
+import abtestsRoutes from "./routes/abtests";
+import { recordOpen as abRecordOpen, checkForWinner } from "./modules/abTesting";
 
 initDatabase();
 startScheduler();
@@ -151,6 +154,16 @@ app.get("/track/open/:token", (c) => {
         [token, row.lead_id, row.campaign_id, row.step_number, email, ip, ua]
       );
       logInfo("system", `Email opened by ${email}`, { lead_id: row.lead_id, campaign_id: row.campaign_id }).catch(() => {});
+      // A/B test open tracking
+      const abRow = db
+        .query<{ ab_test_id: number; ab_variant: string }, [number]>(
+          "SELECT ab_test_id, ab_variant FROM sent_log WHERE id = ? AND ab_test_id IS NOT NULL"
+        )
+        .get(row.id);
+      if (abRow) {
+        abRecordOpen(abRow.ab_test_id, abRow.ab_variant);
+        checkForWinner(abRow.ab_test_id);
+      }
     } else {
       // Repeat open — increment counts
       db.run(
@@ -202,6 +215,8 @@ app.route("/campaigns", campaignsRoutes);
 app.route("/leads", leadsRoutes);
 app.route("/dashboard", dashboardRoutes);
 app.route("/clients", clientsRoutes);
+app.route("/templates", templatesRoutes);
+app.route("/abtests", abtestsRoutes);
 
 app.onError((err, c) => {
   console.error("[error]", err);

@@ -511,6 +511,114 @@ export function initDatabase() {
     );
   `);
 
+  // ─── Campaign Templates ───────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS campaign_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT DEFAULT NULL,
+      category TEXT DEFAULT 'general',
+      daily_limit INTEGER DEFAULT 20,
+      send_days TEXT DEFAULT 'mon,tue,wed,thu,fri',
+      send_start_hour INTEGER DEFAULT 9,
+      send_end_hour INTEGER DEFAULT 17,
+      timezone_aware INTEGER DEFAULT 0,
+      created_from_campaign_id INTEGER DEFAULT NULL,
+      usage_count INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS template_steps (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      template_id INTEGER NOT NULL REFERENCES campaign_templates(id) ON DELETE CASCADE,
+      step_number INTEGER NOT NULL,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      delay_days INTEGER DEFAULT 0
+    );
+  `);
+
+  // Seed default templates (only if none exist yet)
+  const templateCount = db.query<{ n: number }, []>("SELECT COUNT(*) as n FROM campaign_templates").get();
+  if (templateCount && templateCount.n === 0) {
+    const insertTpl = db.prepare(
+      "INSERT INTO campaign_templates (name, description, category, daily_limit) VALUES (?, ?, ?, ?)"
+    );
+    const insertStep = db.prepare(
+      "INSERT INTO template_steps (template_id, step_number, subject, body, delay_days) VALUES (?, ?, ?, ?, ?)"
+    );
+
+    // Template 1 — Agency Outreach
+    const t1 = insertTpl.run(
+      "Agency Outreach",
+      "Cold outreach for agencies offering overflow frontend development work",
+      "agency", 20
+    );
+    const t1id = Number(t1.lastInsertRowid);
+    insertStep.run(t1id, 1, "quick question {{first_name}}",
+      "Hi {{first_name}},\n\n{{personalized_line}}\n\nI help agencies like {{company}} get premium frontend development for overflow projects without the overhead of hiring. Worth a quick 15-minute call?\n\nBest,", 0);
+    insertStep.run(t1id, 2, "re: quick question {{first_name}}",
+      "Hi {{first_name}},\n\nJust following up on my last email. Happy to share some examples of recent work if that helps.\n\nBest,", 3);
+    insertStep.run(t1id, 3, "last note {{first_name}}",
+      "Hi {{first_name}},\n\nDidn't want to keep reaching out if timing is off. If this isn't relevant just let me know and I'll leave you alone.\n\nBest,", 7);
+
+    // Template 2 — SaaS Founder Outreach
+    const t2 = insertTpl.run(
+      "SaaS Founder Outreach",
+      "Cold outreach for SaaS founders who need a premium website",
+      "saas", 20
+    );
+    const t2id = Number(t2.lastInsertRowid);
+    insertStep.run(t2id, 1, "your website {{first_name}}",
+      "Hi {{first_name}},\n\n{{personalized_line}}\n\nI build premium animated websites for SaaS founders who want their site to match the quality of their product. Would love to show you some examples.\n\nBest,", 0);
+    insertStep.run(t2id, 2, "following up {{first_name}}",
+      "Hi {{first_name}},\n\nJust wanted to follow up. Curious if improving your website conversion rate is on your radar this quarter.\n\nBest,", 4);
+    insertStep.run(t2id, 3, "one last thing {{first_name}}",
+      "Hi {{first_name}},\n\nLast email from me. If a better website isn't a priority right now, no worries at all. If it is something you're thinking about, I'm happy to share how I approach it.\n\nBest,", 8);
+
+    // Template 3 — Personal Brand Outreach
+    const t3 = insertTpl.run(
+      "Personal Brand Outreach",
+      "Cold outreach for coaches and consultants needing a premium personal brand site",
+      "personal-brand", 15
+    );
+    const t3id = Number(t3.lastInsertRowid);
+    insertStep.run(t3id, 1, "{{first_name}} — your site",
+      "Hi {{first_name}},\n\n{{personalized_line}}\n\nI specialize in building premium personal brand websites for coaches and consultants. Your work deserves a site that matches your reputation. Open to a quick chat?\n\nBest,", 0);
+    insertStep.run(t3id, 2, "following up",
+      "Hi {{first_name}},\n\nJust circling back on my last message. Do you have 15 minutes this week to explore what a premium site could do for your brand?\n\nBest,", 5);
+    insertStep.run(t3id, 3, "last message",
+      "Hi {{first_name}},\n\nThis is my last follow-up. If now isn't the right time, completely understood. Feel free to reach out whenever you're ready to level up your online presence.\n\nBest,", 10);
+  }
+
+  // ─── A/B Testing ─────────────────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ab_tests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER NOT NULL,
+      step_number INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      status TEXT DEFAULT 'running',
+      variant_a_subject TEXT NOT NULL,
+      variant_b_subject TEXT NOT NULL,
+      variant_a_sent INTEGER DEFAULT 0,
+      variant_b_sent INTEGER DEFAULT 0,
+      variant_a_opened INTEGER DEFAULT 0,
+      variant_b_opened INTEGER DEFAULT 0,
+      variant_a_replied INTEGER DEFAULT 0,
+      variant_b_replied INTEGER DEFAULT 0,
+      winner TEXT DEFAULT NULL,
+      winner_declared_at DATETIME DEFAULT NULL,
+      min_sample_size INTEGER DEFAULT 50,
+      confidence_threshold REAL DEFAULT 0.1,
+      auto_declare INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  try { db.exec("ALTER TABLE sent_log ADD COLUMN ab_test_id INTEGER DEFAULT NULL"); } catch {}
+  try { db.exec("ALTER TABLE sent_log ADD COLUMN ab_variant TEXT DEFAULT NULL"); } catch {}
+
   // Purge any sessions that expired before this boot
   db.exec("DELETE FROM sessions WHERE expires_at < unixepoch() * 1000;");
 
