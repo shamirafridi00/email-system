@@ -12,6 +12,46 @@ import { isUSBusinessHours } from "./utils/timezone";
 import { logError } from "./modules/logger";
 import { createBackup } from "./modules/backup";
 
+// Minimal cron-like scheduler: runs callback at next matching wall-clock minute
+function scheduleCron(cronExpr: string, label: string, fn: () => void): void {
+  function msUntilNextTick(): number {
+    const now = new Date();
+    const next = new Date(now);
+    next.setSeconds(0, 0);
+    next.setMinutes(next.getMinutes() + 1);
+    return next.getTime() - now.getTime();
+  }
+
+  function matchesCron(expr: string, now: Date): boolean {
+    const [min, hour, , , dow] = expr.split(" ");
+    const matches = (field: string, val: number): boolean => {
+      if (field === "*") return true;
+      if (field.startsWith("*/")) return val % parseInt(field.slice(2)) === 0;
+      if (field.includes("-")) {
+        const [lo, hi] = field.split("-").map(Number);
+        return val >= lo && val <= hi;
+      }
+      if (field.includes(",")) return field.split(",").map(Number).includes(val);
+      return parseInt(field) === val;
+    };
+    return (
+      matches(min, now.getMinutes()) &&
+      matches(hour, now.getHours()) &&
+      matches(dow, now.getDay())
+    );
+  }
+
+  function tick(): void {
+    const now = new Date();
+    if (matchesCron(cronExpr, now)) {
+      try { fn(); } catch (e) { console.error(`[cron:${label}] error:`, e); }
+    }
+    setTimeout(tick, msUntilNextTick());
+  }
+
+  setTimeout(tick, msUntilNextTick());
+}
+
 const CONVERSATIONS_DIR = process.env.CONVERSATIONS_DIR || join(process.cwd(), "conversations");
 const PROCESSED_DIR = join(CONVERSATIONS_DIR, "processed");
 
@@ -90,7 +130,7 @@ function scanConversations(): void {
 
 export function startScheduler(): void {
   // Job 1 — midnight reset
-  Bun.cron("0 0 * * *", async () => {
+  scheduleCron("0 0 * * *", "midnight-reset", async () => {
     try {
       resetDailyCounts();
       console.log(`[scheduler] daily counts reset at ${new Date().toISOString()}`);
@@ -102,7 +142,7 @@ export function startScheduler(): void {
   registeredJobs.add("midnight-reset");
 
   // Job 2 — sequence runner, every hour 9am–5pm Mon–Fri
-  Bun.cron("0 9-17 * * 1-5", async () => {
+  scheduleCron("0 9-17 * * 1-5", "sequence-runner", async () => {
     try {
       console.log(`[scheduler] running sequences at ${new Date().toISOString()}`);
       const stats = await runSequences();
@@ -129,7 +169,7 @@ export function startScheduler(): void {
   registeredJobs.add("sequence-runner");
 
   // Job 3 — reply check + HubSpot push, every 2 hours
-  Bun.cron("0 */2 * * *", async () => {
+  scheduleCron("0 */2 * * *", "reply-check-hubspot", async () => {
     try {
       console.log(`[scheduler] checking replies at ${new Date().toISOString()}`);
       const pushed = await checkAndPushReplies();
@@ -142,7 +182,7 @@ export function startScheduler(): void {
   registeredJobs.add("reply-check-hubspot");
 
   // Job 4 — natural warmup: fires every 30 min Mon–Fri, then decides probabilistically
-  Bun.cron("*/30 * * * 1-5", async () => {
+  scheduleCron("*/30 * * * 1-5", "natural-warmup", async () => {
     try {
       if (!isUSBusinessHours()) {
         console.log(`[scheduler] warmup — outside US business hours, skipping`);
@@ -188,7 +228,7 @@ export function startScheduler(): void {
   registeredJobs.add("natural-warmup");
 
   // Job 5 — conversation file scanner, every 5 minutes
-  Bun.cron("*/5 * * * *", () => {
+  scheduleCron("*/5 * * * *", "conversation-scanner", () => {
     try {
       scanConversations();
     } catch (err) {
@@ -199,7 +239,7 @@ export function startScheduler(): void {
   registeredJobs.add("conversation-scanner");
 
   // Job 6 — daily auto conversation generator, Mon–Fri at 6am UTC (2am ET)
-  Bun.cron("0 6 * * 1-5", async () => {
+  scheduleCron("0 6 * * 1-5", "auto-conversation-generator", async () => {
     try {
       console.log(`[scheduler] auto-generate conversations at ${new Date().toISOString()}`);
       const result = await generateDailyConversations();
@@ -216,7 +256,7 @@ export function startScheduler(): void {
   registeredJobs.add("auto-conversation-generator");
 
   // Job 8 — reply queue processor, every 15 minutes
-  Bun.cron("*/15 * * * *", async () => {
+  scheduleCron("*/15 * * * *", "reply-queue-processor", async () => {
     console.log(`[scheduler] reply queue processor firing at ${new Date().toISOString()}`);
     try {
       const count = await processReplyQueue();
@@ -229,7 +269,7 @@ export function startScheduler(): void {
   registeredJobs.add("reply-queue-processor");
 
   // Job 7 — daily warmup summary email, 2am UTC = 7am Pakistan Standard Time (PKT = UTC+5)
-  Bun.cron("0 2 * * *", async () => {
+  scheduleCron("0 2 * * *", "warmup-summary-email", async () => {
     try {
       const setting = db
         .query<{ value: string }, []>("SELECT value FROM system_settings WHERE key = 'send_warmup_summary'")
@@ -249,7 +289,7 @@ export function startScheduler(): void {
   registeredJobs.add("warmup-summary-email");
 
   // Job 9 — daily database backup at 1am UTC
-  Bun.cron("0 1 * * *", async () => {
+  scheduleCron("0 1 * * *", "daily-backup", async () => {
     try {
       const autoRow = db
         .query<{ value: string }, []>("SELECT value FROM system_settings WHERE key = 'auto_backup_enabled'")
@@ -274,7 +314,7 @@ export function startScheduler(): void {
   registeredJobs.add("daily-backup");
 
   // Job 10 — daily bounce rate check, 3am UTC
-  Bun.cron("0 3 * * *", async () => {
+  scheduleCron("0 3 * * *", "daily-bounce-check", async () => {
     try {
       console.log(`[scheduler] daily bounce check starting at ${new Date().toISOString()}`);
       const results = await checkBounceRates();
@@ -289,7 +329,7 @@ export function startScheduler(): void {
   registeredJobs.add("daily-bounce-check");
 
   // Job 11 — client progress reports, 3am UTC = 8am Pakistan time
-  Bun.cron("0 3 * * *", async () => {
+  scheduleCron("0 3 * * *", "client-progress-reports", async () => {
     try {
       const configs = db
         .query<{ id: number; campaign_id: number; client_email: string; send_daily: number; send_weekly: number }, []>(
